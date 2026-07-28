@@ -1,0 +1,340 @@
+name: Replit Template Integrity
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  template-integrity:
+    name: Template integrity checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Keep the release contract visible without snapshotting the complete source
+      # tree. Functional tests below validate behavior; this list only protects the
+      # small set of entry points whose absence would make the template unusable.
+      - name: Required template entry points exist
+        shell: bash
+        run: bash scripts/check-required-files.sh
+
+      - name: Validate replit.md structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          for section in "## Overview" "## User Preferences" "## System Architecture" "## External Dependencies"; do
+            grep -Fq "${section}" replit.md || {
+              echo "replit.md is missing required section: ${section}"
+              exit 1
+            }
+          done
+          # Soft limit: ~4000 tokens ≈ 16000 bytes for safety.
+          size=$(wc -c < replit.md)
+          if [ "${size}" -gt 16000 ]; then
+            echo "replit.md is ${size} bytes; keep it under ~16KB (~4000 tokens)."
+            exit 1
+          fi
+
+      - name: Validate custom instructions size
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Replit soft limit is ~25KB. Warn earlier at 20KB.
+          size=$(wc -c < custom_instruction/instructions.md)
+          if [ "${size}" -gt 20000 ]; then
+            echo "custom_instruction/instructions.md is ${size} bytes; keep under 20KB."
+            exit 1
+          fi
+
+      - name: Validate SKILL.md frontmatter (Agent Skills spec)
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r skill; do
+            dir=$(dirname "${skill}")
+            expected_name=$(basename "${dir}")
+
+            head -n 1 "${skill}" | grep -qE '^---$' || {
+              echo "${skill}: must start with --- frontmatter delimiter"
+              fail=1; continue
+            }
+
+            name=$(awk '/^---$/{c++; next} c==1 && /^name:/ {sub(/^name:[[:space:]]*/,""); print; exit}' "${skill}")
+            desc=$(awk '/^---$/{c++; next} c==1 && /^description:/ {sub(/^description:[[:space:]]*/,""); print; exit}' "${skill}")
+
+            if [ "${name}" != "${expected_name}" ]; then
+              echo "${skill}: frontmatter name='${name}' must equal parent dir '${expected_name}'"
+              fail=1
+            fi
+            if ! echo "${name}" | grep -qE '^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$'; then
+              echo "${skill}: name '${name}' violates Agent Skills spec (lowercase a-z 0-9 and -, no leading/trailing hyphen, <=64 chars)"
+              fail=1
+            fi
+            if echo "${name}" | grep -q -- '--'; then
+              echo "${skill}: name '${name}' has consecutive hyphens"
+              fail=1
+            fi
+            if [ -z "${desc}" ]; then
+              echo "${skill}: description must be non-empty"
+              fail=1
+            fi
+            desc_len=$(printf '%s' "${desc}" | wc -c)
+            if [ "${desc_len}" -gt 1024 ]; then
+              echo "${skill}: description is ${desc_len} chars (>1024)"
+              fail=1
+            fi
+            if awk '/^---$/{c++; next} c==1' "${skill}" | grep -qE '^(argument-hint|user-invocable):'; then
+              echo "${skill}: argument-hint / user-invocable are not in the Agent Skills spec; move under metadata:"
+              fail=1
+            fi
+          done < <(find .claude/skills .agents/skills -name SKILL.md)
+          exit "${fail}"
+
+      - name: Validate skill references from replit.md and instructions.md
+        shell: bash
+        run: |
+          set -euo pipefail
+          for src in replit.md custom_instruction/instructions.md; do
+            refs="$(grep -oE '\.claude/skills/[A-Za-z0-9._-]+/SKILL\.md' "${src}" | sort -u || true)"
+            while IFS= read -r ref; do
+              [ -z "${ref}" ] && continue
+              test -f "${ref}" || { echo "${src}: broken skill reference: ${ref}"; exit 1; }
+            done <<< "${refs}"
+          done
+
+      - name: Validate template repository scope wording
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "generated project repository" custom_instruction/instructions.md || {
+            echo "instructions.md must explicitly state generated-project-repository scope"
+            exit 1
+          }
+          grep -q "Custom Template configuration repository" replit.md || {
+            echo "replit.md must explicitly state template repository scope"
+            exit 1
+          }
+
+      - name: Validate scaffold consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          # PACKAGE_REPLACE_ME is the only allowed Java-package placeholder
+          # token. Anywhere else it appears, treat as drift.
+          for f in templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/Application.java \
+                   templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/OpenApiSpecConfig.java; do
+            grep -q 'PACKAGE_REPLACE_ME' "$f" || { echo "Scaffold $f lost the PACKAGE_REPLACE_ME placeholder"; exit 1; }
+          done
+          test -f templates/generated-project/scaffold/backend/application/src/main/resources/api/v1/specs/openapi.yaml \
+            || { echo "Scaffold OpenAPI spec must live outside static/"; exit 1; }
+          test ! -f templates/generated-project/scaffold/backend/application/src/main/resources/static/api/v1/specs/openapi.yaml \
+            || { echo "OpenAPI spec must not live under static/ because Vite build wipes it"; exit 1; }
+          # Liquibase master must include the usage-events changelog.
+          master='templates/generated-project/scaffold/backend/migrations/src/main/resources/db/changelog/db.changelog-master.xml'
+          grep -q '0001-usage-events.xml' "$master" \
+            || { echo "Liquibase master changelog does not include 0001-usage-events.xml"; exit 1; }
+          grep -q '0002-sample-reference.xml' "$master" \
+            || { echo "Liquibase master changelog does not include 0002-sample-reference.xml"; exit 1; }
+          # Frontend package.json must define the canonical scripts.
+          pj='templates/generated-project/scaffold/frontend/package.json'
+          for k in '"generate:api"' '"check:api"' '"test"' 'openapi-typescript' 'openapi-fetch' '@tanstack/react-query' '@clerk/clerk-react' 'vitest' '@testing-library/react'; do
+            grep -q "$k" "$pj" || { echo "Scaffold frontend/package.json missing $k"; exit 1; }
+          done
+          readme='templates/generated-project/scaffold/README.md.template'
+          for k in '^## What this is' '^## API' 'Swagger UI' 'OpenAPI YAML'; do
+            grep -q "$k" "$readme" || { echo "Scaffold README template missing $k"; exit 1; }
+          done
+          grep -Eq '^VITE_API_BASE_URL=' templates/generated-project/scaffold/.env.example \
+            || { echo "Scaffold .env.example must define VITE_API_BASE_URL"; exit 1; }
+          grep -q '<artifactId>h2</artifactId>' templates/generated-project/scaffold/backend/application/pom.xml \
+            || { echo "application/pom.xml must keep H2 test dependency for ApplicationSmokeTest"; exit 1; }
+          grep -q '/actuator/prometheus' \
+              templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java \
+            || { echo "/actuator/prometheus must stay public"; exit 1; }
+          grep -Fq '"/sign-in/**"' \
+              templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java \
+            || { echo "AuthConstants must keep Clerk sign-in routes public"; exit 1; }
+          VERIFY_TEMPLATE_REPO_ROOT="${GITHUB_WORKSPACE}" \
+            bash templates/generated-project/scaffold/scripts/verify-gates.sh --template-replit
+          bash templates/generated-project/scaffold/scripts/verify-gates.sh --scaffold-source
+          bash templates/generated-project/scaffold/scripts/structure-lint.sh --scaffold
+          bash templates/generated-project/scaffold/scripts/test-strip-scaffold-samples.sh
+          bash templates/generated-project/scaffold/scripts/test-check-production-scanners.sh
+          bash templates/generated-project/scaffold/scripts/test-setup-project.sh
+          bash templates/generated-project/scaffold/scripts/test-materialize-project.sh
+          bash templates/generated-project/scaffold/scripts/test-configure-clerk-development.sh
+
+      - name: No service-account JSON in the template itself
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Look only at *.json files; ignore markdown/yml/workflow files that
+          # legitimately describe the very patterns we're protecting against.
+          found=0
+          while IFS= read -r f; do
+            if grep -E -q '"private_key_id"|"type"[[:space:]]*:[[:space:]]*"service_account"|BEGIN PRIVATE KEY' "${f}"; then
+              echo "Service-account JSON detected: ${f}"
+              found=1
+            fi
+          done < <(find . -path ./.git -prune -o -type f -name '*.json' -print)
+          [ "${found}" -eq 0 ] || exit 1
+
+      - name: Shell syntax for every script
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Every .sh file, regardless of executable bit — a missing +x must not
+          # silently drop a script out of the checked set.
+          count=0
+          while IFS= read -r f; do
+            bash -n "$f"
+            count=$((count + 1))
+          done < <(find scripts templates/generated-project/scaffold/scripts \
+                     -type f -name '*.sh' -print | sort)
+          echo "==> ${count} script(s) parsed"
+          [ "${count}" -gt 0 ] || exit 1
+
+      - name: Dual registries, portable payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/check-payload-portability.sh
+          bash scripts/test-install-claude-fixtures.sh
+
+      - name: Skills do not compete for the same trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/check-skill-selection.sh .claude/skills
+          bash scripts/check-skill-selection.sh .agents/skills
+
+      # Every task pays for CLAUDE.md plus every rule without `paths:`, so growth
+      # there is a permanent tax that looks like an ordinary diff in review.
+      - name: Always-on agent context stays within budget
+        shell: bash
+        run: bash scripts/check-always-on-budget.sh
+
+      # Critical custom gates have positive and negative fixtures with diagnostic
+      # assertions. The suite is intentionally curated: adding a small check does
+      # not require extending a second gate-discovery framework.
+      - name: Critical enforcement gates reject known violations
+        shell: bash
+        run: bash tests/gates/run.sh
+
+      - name: Documented skill IDs exist in the shipped payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/check-documented-skill-ids.sh
+
+      - name: Generated skills match llm-aux.lock (no drift)
+        shell: bash
+        env:
+          # CI has no sibling checkout, so resolve the pinned source from the
+          # remote recorded in llm-aux.lock.
+          LLM_AUX_CACHE: ${{ runner.temp }}/llm-aux-cache
+        run: bash scripts/test-sync-drift.sh
+
+      - name: Sync transaction rolls back on failure
+        shell: bash
+        run: bash scripts/test-sync-transaction.sh
+
+  replit-release-artifact:
+    name: Flattened Replit release artifact
+    runs-on: ubuntu-latest
+    needs: template-integrity
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build and validate release artifact
+        run: bash scripts/test-release-replit-template.sh
+
+  scaffold-docker-smoke:
+    name: Scaffold Docker smoke (materialized)
+    runs-on: ubuntu-latest
+    needs: template-integrity
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Materialize project
+        run: |
+          set -euo pipefail
+          WORK="$(mktemp -d)"
+          echo "WORK=${WORK}" >> "${GITHUB_ENV}"
+          SCAFFOLD_ROOT="${GITHUB_WORKSPACE}/templates/generated-project/scaffold" \
+            TEMPLATE_REPO_ROOT="${GITHUB_WORKSPACE}" \
+            MATERIALIZE_DEST="${WORK}" \
+            bash templates/generated-project/scaffold/scripts/materialize-project.sh replitmvp
+      - name: Docker local smoke
+        working-directory: ${{ env.WORK }}
+        run: |
+          set -euo pipefail
+          docker compose --profile local config
+          bash scripts/docker-local-smoke.sh
+      - name: Docker context-path smoke
+        working-directory: ${{ env.WORK }}
+        run: bash scripts/docker-context-path-smoke.sh
+
+  scaffold-verify:
+    name: Scaffold full verify
+    runs-on: ubuntu-latest
+    needs: template-integrity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Materialize scaffold and run full verify gate
+        shell: bash
+        run: bash templates/generated-project/scaffold/scripts/ci-verify-scaffold.sh
+
+  integration-packs:
+    name: Integration pack installers
+    runs-on: ubuntu-latest
+    needs: template-integrity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run integration pack install tests
+        shell: bash
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+        run: bash templates/integrations/test-install-packs.sh
+
+  stripped-project:
+    name: Stripped project lifecycle
+    runs-on: ubuntu-latest
+    needs: template-integrity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Cover both states absent from the default scaffold build: the empty
+      # post-initialization project and a real project after sample replacement.
+      - name: Verify empty and first-aggregate stripped states
+        shell: bash
+        run: bash tests/lifecycle/test-stripped-project.sh

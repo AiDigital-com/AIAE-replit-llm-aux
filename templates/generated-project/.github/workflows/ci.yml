@@ -1,0 +1,746 @@
+name: Java Backend CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_integration_tests:
+        description: "Run integration tests with PostgreSQL"
+        required: false
+        type: boolean
+        default: false
+      run_local_dev_dry_run:
+        description: "Run the local-dev docker-compose dry run"
+        required: false
+        type: boolean
+        default: true
+
+env:
+  MAVEN_CLI_OPTS: "--batch-mode -U"
+  # Set this only when server.servlet.context-path is non-empty.
+  APP_CONTEXT_PATH: ""
+  LOCAL_HEALTH_PATH: "/actuator/health"
+  LOCAL_PROMETHEUS_PATH: "/actuator/prometheus"
+
+jobs:
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    outputs:
+      has_backend: ${{ steps.detect.outputs.has_backend }}
+      has_frontend: ${{ steps.detect.outputs.has_frontend }}
+      has_persistence: ${{ steps.detect.outputs.has_persistence }}
+      usage_logging_enabled: ${{ steps.detect.outputs.usage_logging_enabled }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Validate committed agent surfaces and reject template-only sources
+        run: |
+          set -euo pipefail
+          leaked=""
+          for path in templates custom_instruction; do
+            if git ls-files --error-unmatch "${path}" >/dev/null 2>&1; then
+              leaked="${leaked} ${path}"
+            fi
+          done
+          if [ -n "${leaked}" ]; then
+            echo "::error::Template control plane leaked into git:${leaked}"
+            echo "::error::Run: bash scripts/setup-project.sh"
+            echo "::error::Then redo the commit. Canonical template sources do not belong to the app."
+            exit 1
+          fi
+          mode="$(bash scripts/lib/check-agent-surfaces.sh .)"
+          echo "Agent lifecycle surface: ${mode}"
+          git ls-files --error-unmatch CLAUDE.md >/dev/null
+          git ls-files --error-unmatch .claude/skills/verification-gate/SKILL.md >/dev/null
+          if [ "${mode}" = "active" ]; then
+            git ls-files --error-unmatch AGENTS.md >/dev/null
+            git ls-files --error-unmatch replit.md >/dev/null
+            git ls-files --error-unmatch .agents/skills/verification-gate/SKILL.md >/dev/null
+          fi
+
+      - name: Reject forbidden backend stacks
+        run: |
+          set -euo pipefail
+          forbidden=""
+          # Python files at root (Replit auto-injects these even when the template is Java)
+          for f in main.py requirements.txt Pipfile pyproject.toml poetry.lock uv.lock; do
+            [ -f "$f" ] && forbidden="${forbidden} $f"
+          done
+          if find . -maxdepth 3 -name "manage.py" -o -name "wsgi.py" -o -name "asgi.py" 2>/dev/null | head -1 | grep -q .; then
+            forbidden="${forbidden} python-app-files"
+          fi
+          # Node backends (frontend/package.json is fine; root-level isn't)
+          if [ -f package.json ] && [ ! -f frontend/package.json ]; then
+            if grep -Eq '"(express|fastify|koa|@nestjs/core|hapi|next)"' package.json; then
+              forbidden="${forbidden} node-backend-deps"
+            fi
+          fi
+          # Other forbidden backends
+          [ -f go.mod ] && forbidden="${forbidden} go.mod"
+          [ -f Gemfile ] && forbidden="${forbidden} Gemfile"
+          [ -f composer.json ] && forbidden="${forbidden} composer.json"
+          [ -f Cargo.toml ] && forbidden="${forbidden} Cargo.toml"
+          [ -f mix.exs ] && forbidden="${forbidden} mix.exs"
+          # .replit must not declare python-* modules or flask/django integrations
+          if [ -f .replit ]; then
+            if grep -Eq '"python-[0-9]' .replit; then
+              forbidden="${forbidden} python-module-in-.replit"
+            fi
+            if grep -Eq 'integrations.*=.*\[.*"(flask|django|fastapi)[_-]' .replit; then
+              forbidden="${forbidden} python-integration-in-.replit"
+            fi
+          fi
+          if [ -n "${forbidden}" ]; then
+            echo "::error::Forbidden backend stack detected:${forbidden}"
+            echo "::error::This template REQUIRES Java + Spring Boot + Maven."
+            echo "::error::See replit.md and CLAUDE.md for the fixed Java/React stack."
+            echo "::error::Delete those files/lines, then run bash scripts/setup-project.sh."
+            exit 1
+          fi
+
+      - name: Detect project shape
+        id: detect
+        run: |
+          set -euo pipefail
+          has_backend=false
+          has_frontend=false
+          has_persistence=false
+          usage_logging_enabled=true
+
+          if [ -n "$(find . -name pom.xml -print0 | xargs -0 grep -l '<artifactId>spring-boot-starter-web</artifactId>' 2>/dev/null | head -1)" ]; then
+            has_backend=true
+          fi
+          if [ -f frontend/package.json ]; then
+            has_frontend=true
+          fi
+          if [ -n "$(find . -name pom.xml -print0 | xargs -0 grep -El 'spring-boot-starter-data-jpa|liquibase-core' 2>/dev/null | head -1)" ]; then
+            has_persistence=true
+          fi
+          if [ -f .env.example ]; then
+            v=$(grep -E '^USAGE_LOGGING_ENABLED=' .env.example | head -n1 | cut -d= -f2- || true)
+            if [ "${v}" = "false" ]; then usage_logging_enabled=false; fi
+          fi
+          {
+            echo "has_backend=${has_backend}"
+            echo "has_frontend=${has_frontend}"
+            echo "has_persistence=${has_persistence}"
+            echo "usage_logging_enabled=${usage_logging_enabled}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run repository structure and policy gates
+        run: |
+          set -euo pipefail
+          bash scripts/structure-lint.sh
+          bash scripts/verify-gates.sh
+
+      - name: Verify auth placeholders in .env.example
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          test -f .env.example || { echo ".env.example is required"; exit 1; }
+          required_vars=(
+            AUTH_ALLOWED_EMAIL_DOMAIN AUTH_AUTHORIZED_PARTIES
+            AUTH_ISSUER_URI AUTH_JWKS_URI AUTH_AUDIENCE
+            CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY
+            CLERK_SIGN_IN_FORCE_REDIRECT_URL CLERK_SIGN_UP_FORCE_REDIRECT_URL
+            VITE_CLERK_PUBLISHABLE_KEY VITE_CLERK_JWT_TEMPLATE
+            VITE_CLERK_SIGN_IN_FORCE_REDIRECT_URL VITE_CLERK_SIGN_UP_FORCE_REDIRECT_URL
+          )
+          for v in "${required_vars[@]}"; do
+            grep -Eq "^${v}=" .env.example || { echo "Missing ${v}= in .env.example"; exit 1; }
+          done
+
+      - name: Verify usage logging placeholders and secret hygiene
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          required_usage_vars=( USAGE_LOGGING_ENABLED USAGE_LOG_SERVICE_NAME USAGE_LOG_ENVIRONMENT )
+          for v in "${required_usage_vars[@]}"; do
+            grep -Eq "^${v}=" .env.example || { echo "Missing ${v}= in .env.example"; exit 1; }
+          done
+          if grep -R --exclude-dir=.git -n '"private_key_id"\|"private_key"\|"type": "service_account"' .; then
+            echo "Service account JSON keys must not be committed"
+              exit 1
+          fi
+
+      - name: Verify README describes app and API
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          test -f README.md || { echo "README.md is required"; exit 1; }
+          grep -q '^## What this is' README.md || { echo "README must explain what the app does"; exit 1; }
+          grep -q '^## API' README.md || { echo "README must include an API section"; exit 1; }
+          grep -q 'Swagger UI' README.md || { echo "README must link to Swagger UI"; exit 1; }
+          grep -q 'OpenAPI YAML' README.md || { echo "README must link to the OpenAPI YAML"; exit 1; }
+
+      - name: Verify usage_events Liquibase changelog exists
+        if: |
+          steps.detect.outputs.has_backend == 'true' &&
+          steps.detect.outputs.usage_logging_enabled == 'true'
+        run: |
+          set -euo pipefail
+          if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-data-jpa</artifactId>" | grep -q .; then
+            echo "Usage logging requires spring-boot-starter-data-jpa (writes to Postgres usage_events)"; exit 1
+          fi
+          # Look ONLY inside Liquibase changelog directories so we don't match
+          # documentation or comments elsewhere in the repo.
+          changelog_hits=$(find . -path '*/db/changelog/*' \( -name '*.xml' -o -name '*.yaml' -o -name '*.yml' -o -name '*.sql' -o -name '*.json' \) -exec grep -l -E "usage_events|usage-events" {} + 2>/dev/null || true)
+          if [ -z "${changelog_hits}" ]; then
+            echo "Usage logging requires a Liquibase changelog under */db/changelog/ that creates usage_events"; exit 1
+          fi
+
+      - name: Verify USAGE_LOG_SERVICE_NAME is not the placeholder
+        if: |
+          steps.detect.outputs.has_backend == 'true' &&
+          steps.detect.outputs.usage_logging_enabled == 'true'
+        run: |
+          set -euo pipefail
+          # .env.example may carry the placeholder, but a committed .env (which
+          # we forbid anyway) or an application-*.yml override must not.
+          if grep -RIn -E '^USAGE_LOG_SERVICE_NAME[[:space:]]*[:=][[:space:]]*("?(replit-mvp-template|<stable-service-name>|<service-name>|TODO|change-me)"?)\b' \
+              --include='*.yml' --include='*.yaml' --include='*.properties' \
+              --exclude-dir=.git . >/dev/null; then
+            echo "USAGE_LOG_SERVICE_NAME is set to a placeholder in a non-.env.example file. Set it to the real service identifier before merging."
+            exit 1
+          fi
+
+      - name: Verify git-commit-id plugin
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>git-commit-id-maven-plugin</artifactId>" | grep -q .; then
+            echo "git-commit-id-maven-plugin is required in project POMs"
+            exit 1
+          fi
+
+      - name: Verify OpenAPI spec and generator plugin
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          spec="$(find . -path "*/src/main/resources/api/v1/specs/openapi.yaml" -type f)"
+          test -n "${spec}" || {
+            echo "OpenAPI spec required at */src/main/resources/api/v1/specs/openapi.yaml (NOT under static/ — Vite build wipes that dir)"
+            exit 1
+          }
+          if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>openapi-generator-maven-plugin</artifactId>" | grep -q .; then
+            echo "openapi-generator-maven-plugin is required when REST API spec exists"
+            exit 1
+          fi
+          required_openapi_options=(
+            "<interfaceOnly>true</interfaceOnly>"
+            "<useSpringBoot3>true</useSpringBoot3>"
+            "<openApiNullable>false</openApiNullable>"
+            "<skipDefaultInterface>true</skipDefaultInterface>"
+            "<useTags>true</useTags>"
+            "<dateLibrary>java8-localdatetime</dateLibrary>"
+          )
+          for option in "${required_openapi_options[@]}"; do
+            if ! find . -name pom.xml -print0 | xargs -0 grep -l "${option}" | grep -q .; then
+              echo "Missing required OpenAPI generator option: ${option}"
+              exit 1
+            fi
+          done
+
+      - name: Verify frontend OpenAPI codegen wiring
+        if: steps.detect.outputs.has_frontend == 'true'
+        run: |
+          set -euo pipefail
+          grep -q '"generate:api"' frontend/package.json || { echo "frontend/package.json must define generate:api"; exit 1; }
+          grep -q '"test"' frontend/package.json || { echo "frontend/package.json must define test"; exit 1; }
+          grep -q 'openapi-typescript' frontend/package.json || { echo "frontend must use openapi-typescript"; exit 1; }
+          grep -q 'openapi-fetch'      frontend/package.json || { echo "frontend must use openapi-fetch"; exit 1; }
+          grep -q '@tanstack/react-query' frontend/package.json || { echo "frontend must use TanStack Query"; exit 1; }
+          grep -Eq '^VITE_API_BASE_URL=' .env.example || { echo ".env.example must define VITE_API_BASE_URL="; exit 1; }
+          if [ -f frontend/tsconfig.json ] && grep -q '"@/\*"' frontend/tsconfig.json; then
+            grep -q 'resolve:' frontend/vite.config.ts && grep -q '"@"' frontend/vite.config.ts || {
+              echo "frontend/vite.config.ts must define resolve.alias for @ when tsconfig has @/*"
+              exit 1
+            }
+            grep -q 'CLERK_PUBLISHABLE_KEY' frontend/vite.config.ts || {
+              echo "frontend/vite.config.ts must map Replit CLERK_PUBLISHABLE_KEY into VITE_CLERK_PUBLISHABLE_KEY"
+              exit 1
+            }
+          fi
+          ! grep -RInE '(baseUrl|apiBaseUrl|BASE_URL)[[:space:]]*[:=][[:space:]]*["'\'']/api/v1/?["'\'']' frontend/src/shared/api frontend/src/shared/config >/dev/null 2>&1 || {
+            echo "Frontend apiBaseUrl/baseUrl/BASE_URL must not be /api/v1; OpenAPI paths already include /api/v1"
+            exit 1
+          }
+          ! grep -RInE '^VITE_API_BASE_URL=/api/v1/?$' .env.example frontend/.env* >/dev/null 2>&1 || {
+            echo "VITE_API_BASE_URL must not be /api/v1; leave it empty for same-origin Replit/Vite proxy"
+            exit 1
+          }
+          ! grep -RInE 'fetch[[:space:]]*\(|from[[:space:]]+["'\'']axios["'\'']|axios\.|new[[:space:]]+XMLHttpRequest' \
+              --include='*.ts' --include='*.tsx' frontend/src >/dev/null 2>&1 || {
+            echo "Frontend must use shared/api/client.ts (typed openapi-fetch), not raw fetch/axios/XMLHttpRequest"
+            exit 1
+          }
+          ! grep -RInE 'Sidebar|SideNav|LeftNav|side-nav|side-menu|left-nav|left-menu|app__sidebar|layout__sidebar' \
+              --include='*.ts' --include='*.tsx' --include='*.css' frontend/src >/dev/null 2>&1 || {
+            echo "Frontend must not use a left side menu/sidebar; use top navigation, tabs, filters, and toolbars"
+            exit 1
+          }
+          bash scripts/lib/check-api-client-paths.sh \
+            backend/application/src/main/resources/api/v1/specs/openapi.yaml \
+            frontend/src
+
+      - name: Verify Replit runtime anti-regressions
+        run: |
+          set -euo pipefail
+          if [ -f .replit ]; then
+            ! grep -Eq 'spring-boot:run.*backend/pom.xml|-pl application -am .*spring-boot:run' .replit || {
+              echo ".replit must install the reactor first, then run spring-boot:run from backend/application/pom.xml"
+              exit 1
+            }
+            if [ "${{ steps.detect.outputs.has_backend }}" = "true" ]; then
+              grep -q 'mvn -f backend/application/pom.xml' .replit || {
+                echo ".replit backend workflow must run backend/application/pom.xml directly"
+                exit 1
+              }
+            fi
+            if [ "${{ steps.detect.outputs.has_frontend }}" = "true" ]; then
+              grep -q 'npm run generate:api' .replit || {
+                echo ".replit frontend workflow must run npm run generate:api before Vite"
+                exit 1
+              }
+              ! grep -Eq 'npm run dev.*--port 5000|vite.*--port 5000|localPort = 5173' .replit || {
+                echo "Vite must not run on/expose 5000; Spring owns the public Replit port"
+                exit 1
+              }
+              ! grep -RInE 'React dev server is running|Switch the preview pane to port 5173|Open on port 5173|built React app is served directly from port 5000' \
+                  frontend/src >/dev/null 2>&1 || {
+                echo "Frontend must render the real app, not a Replit port-switch placeholder"
+                exit 1
+              }
+            fi
+            grep -q 'PORT = "5000"' .replit || {
+              echo ".replit [env] must keep PORT = \"5000\""
+              exit 1
+            }
+            grep -q 'localPort = 5000' .replit && grep -q 'externalPort = 80' .replit || {
+              echo ".replit must expose exactly backend 5000 -> externalPort 80"
+              exit 1
+            }
+          fi
+
+      - name: Verify backend runtime anti-regressions
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          group_id="$(sed -n 's:.*<groupId>\(.*\)</groupId>.*:\1:p' backend/pom.xml | head -n 1)"
+          [[ "${group_id}" =~ ^com\.aidigital\.[a-z][a-z0-9]*$ ]] || {
+            echo "backend/pom.xml groupId must be com.aidigital.<app-name-package> (lowercase alphanumeric): got ${group_id}"
+            exit 1
+          }
+          ! grep -RInE '^package[[:space:]]+(org\.example|com\.example|io\.replit|demo|[a-z][a-z0-9_]*);' \
+              backend/application/src/main/java backend/service/src/main/java backend/domain/src/main/java >/dev/null 2>&1 || {
+            echo "Java packages must use com.aidigital.<app-name-package>.*, not example/replit/demo/one-segment packages"
+            exit 1
+          }
+          ! grep -RInE '^package[[:space:]]+' \
+              backend/application/src/main/java backend/service/src/main/java backend/domain/src/main/java \
+              | grep -Ev '^.*:package[[:space:]]+com\.aidigital\.' >/dev/null 2>&1 || {
+            echo "Every application/service/domain Java package must start with com.aidigital."
+            exit 1
+          }
+          grep -q 'port:[[:space:]]*\${PORT:5000}' backend/application/src/main/resources/application-replit.yml || {
+            echo "application-replit.yml must keep server.port: \${PORT:5000}"
+            exit 1
+          }
+          grep -Fq 'url: jdbc:postgresql://${PGHOST' backend/application/src/main/resources/application-replit.yml || {
+            echo "application-replit.yml must set datasource URL from PGHOST/PGPORT/PGDATABASE"
+            exit 1
+          }
+          grep -Fq 'username: ${PGUSER' backend/application/src/main/resources/application-replit.yml || {
+            echo "application-replit.yml must set datasource username from PGUSER"
+            exit 1
+          }
+          grep -Fq 'password: ${PGPASSWORD' backend/application/src/main/resources/application-replit.yml || {
+            echo "application-replit.yml must set datasource password from PGPASSWORD"
+            exit 1
+          }
+          ! grep -RIn '^AUTH_[A-Z_]*:[[:space:]]*\${AUTH_' backend/application/src/main/resources >/dev/null 2>&1 || {
+            echo "Do not relay AUTH_* env vars as top-level YAML keys; Spring treats them as circular placeholders"
+            exit 1
+          }
+          ! grep -RIn '^[[:space:]]*spring\.security\.oauth2\.resourceserver\.jwt\|^[[:space:]]*resourceserver:' backend/application/src/main/resources >/dev/null 2>&1 || {
+            echo "Do not configure spring.security.oauth2.resourceserver.jwt.* in YAML; SecurityConfig owns JwtDecoder"
+            exit 1
+          }
+          ! grep -RIn 'sslmode=require' backend/application/src/main/resources/application-replit.yml >/dev/null 2>&1 || {
+            echo "application-replit.yml must not force sslmode=require for Replit Postgres"
+            exit 1
+          }
+          ! grep -RInE 'ReplitDatabaseUrlPostProcessor|EnvironmentPostProcessor.imports|spring.factories' backend/application/src/main >/dev/null 2>&1 || {
+            echo "Do not use ReplitDatabaseUrlPostProcessor or EnvironmentPostProcessor registration; application-replit.yml owns datasource"
+            exit 1
+          }
+          grep -q '<groupId>org.postgresql</groupId>' backend/application/pom.xml \
+              && grep -q '<artifactId>postgresql</artifactId>' backend/application/pom.xml || {
+            echo "backend/application/pom.xml must declare the PostgreSQL runtime driver"
+            exit 1
+          }
+          grep -q '<artifactId>h2</artifactId>' backend/application/pom.xml || {
+            echo "backend/application/pom.xml must keep H2 test dependency for ApplicationSmokeTest"
+            exit 1
+          }
+          grep -RIn '/actuator/prometheus' backend/application/src/main/java >/dev/null || {
+            echo "/actuator/prometheus must remain public/reachable"
+            exit 1
+          }
+          auth_constants="$(find backend/application/src/main/java -path '*/security/AuthConstants.java' -print -quit)"
+          [ -n "${auth_constants}" ] \
+              && grep -Fq '"/"' "${auth_constants}" \
+              && grep -Fq '"/assets/**"' "${auth_constants}" || {
+            echo "AuthConstants must keep the React shell + static assets public"
+            exit 1
+          }
+          for module in $(sed -n 's:.*<module>\(.*\)</module>.*:\1:p' backend/pom.xml); do
+            module_dir="backend/${module}"
+            [ -d "${module_dir}" ] || {
+              echo "backend/pom.xml lists missing module: ${module}"
+              exit 1
+            }
+            [ -d "${module_dir}/src" ] \
+                && find "${module_dir}/src" -type f ! -path '*/target/*' | grep -q . || {
+              echo "Maven module must not be empty/POM-only: ${module}"
+              exit 1
+            }
+          done
+          if [ ! -f backend/external-services/pom.xml ]; then
+            ! grep -RIn '<artifactId>external-services</artifactId>\|<module>external-services</module>' \
+                backend/pom.xml backend/service/pom.xml >/dev/null 2>&1 || {
+              echo "external-services is optional; do not reference it when no module exists"
+              exit 1
+            }
+          fi
+          ! grep -RIn '@AuthenticationPrincipal' backend/application/src/main/java >/dev/null 2>&1 || {
+            echo "Generated OpenAPI interfaces do not include @AuthenticationPrincipal parameters; use SecurityContextHolder/AppUserFactory"
+            exit 1
+          }
+          ! grep -RInE '(^|[^.[:alnum:]_])getRequest[[:space:]]*\(' backend/application/src/main/java >/dev/null 2>&1 || {
+            echo "Do not call getRequest() from generated OpenAPI interfaces"
+            exit 1
+          }
+          ! grep -RIn '@Slf4j\|private static final Logger log\|Logger log' backend/application/src/main/java >/dev/null 2>&1 || {
+            echo "Use explicit private static final Logger LOG in framework glue"
+            exit 1
+          }
+          auth_props="$(find backend/application/src/main/java -path '*/security/AuthProperties.java' -print -quit)"
+          [ -z "${auth_props}" ] || ! grep -RInE '@(Getter|Setter|Data|Value|RequiredArgsConstructor)' "${auth_props}" >/dev/null 2>&1 || {
+            echo "AuthProperties must use explicit getters/setters, not Lombok"
+            exit 1
+          }
+          logbook_config="$(find backend/application/src/main/java -path '*/config/LogbookConfig.java' -print -quit)"
+          [ -z "${logbook_config}" ] || grep -Fq 'new DefaultSink(new JsonHttpLogFormatter(), new DefaultHttpLogWriter())' "${logbook_config}" || {
+            echo "Logbook DefaultSink must be built with formatter + writer"
+            exit 1
+          }
+          usage_persistence="$(find backend/event-logging-to-db-feature/src/main/java -path '*/usagelogging/persistence/UsageEventPersistenceService.java' -print -quit)"
+          [ -n "${usage_persistence}" ] \
+              && grep -Fq '@Async("usageLoggingExecutor")' "${usage_persistence}" \
+              && grep -Fq '@Transactional(propagation = Propagation.REQUIRES_NEW)' "${usage_persistence}" || {
+            echo "UsageEventPersistenceService must own @Async + REQUIRES_NEW persistence"
+            exit 1
+          }
+          usage_aspect="$(find backend/event-logging-to-db-feature/src/main/java -path '*/usagelogging/UsageLoggingAspect.java' -print -quit)"
+          [ -z "${usage_aspect}" ] || ! grep -q '^[[:space:]]*@Transactional' "${usage_aspect}" || {
+            echo "Do not put @Transactional on @Around advice; use UsageEventPersistenceService"
+            exit 1
+          }
+          usage_entity="$(find backend/event-logging-to-db-feature/src/main/java -path '*/usagelogging/entities/UsageEventEntity.java' -print -quit)"
+          [ -z "${usage_entity}" ] || {
+            grep -Fq '@JdbcTypeCode(SqlTypes.JSON)' "${usage_entity}" \
+                && grep -Fq 'Map<String, Object> attributes' "${usage_entity}" || {
+              echo "UsageEventEntity.attributes must be JSONB via @JdbcTypeCode(SqlTypes.JSON) Map<String,Object>"
+              exit 1
+            }
+          }
+          ! grep -RInE "LOWER\\(CONCAT\\('%',[[:space:]]*:[A-Za-z0-9_]+" \
+              backend/domain/src/main/java backend/service/src/main/java >/dev/null 2>&1 || {
+            echo "Nullable JPQL LIKE params must use prebuilt patterns or cast(:param as string), not LOWER(CONCAT('%', :param, ...))"
+            exit 1
+          }
+          while IFS= read -r debounce_hook; do
+            grep -q 'useEffect' "${debounce_hook}" \
+                && grep -q 'clearTimeout' "${debounce_hook}" || {
+              echo "useDebounce hooks must update via useEffect with cleanup: ${debounce_hook}"
+              exit 1
+            }
+          done < <(find frontend/src -type f \( -name '*useDebounce*.ts' -o -name '*useDebounce*.tsx' \))
+          ! grep -RInE 'ResponseEntity<[[:space:]]*byte\[\]|ResponseEntity<byte\[\]>' backend/application/src/main/java >/dev/null 2>&1 || {
+            echo "Export/download endpoints must use OpenAPI binary schema and ResponseEntity<Resource>, not byte[]"
+            exit 1
+          }
+          ! grep -Eq 'spring-boot-starter-(security|oauth2-resource-server|web)|spring-security|jakarta.servlet-api|jjwt-' backend/service/pom.xml || {
+            echo "backend/service/pom.xml must not depend on web/security/servlet/JWT libraries"
+            exit 1
+          }
+          ! grep -RInE 'SecurityContextHolder|JwtDecoder|JwtAuthenticationToken|io\.jsonwebtoken|org\.springframework\.security|org\.springframework\.web|jakarta\.servlet' backend/service/src/main/java >/dev/null 2>&1 || {
+            echo "backend/service source must not import web/security/JWT/servlet APIs"
+            exit 1
+          }
+
+      - name: Verify MVP backend safety tests exist
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          controller_count=0
+          service_count=0
+          test_count=0
+
+          if [ -d backend/application/src/main/java ]; then
+            controller_count=$(find backend/application/src/main/java -name '*Controller.java' | wc -l | tr -d ' ')
+          fi
+          if [ -d backend/service/src/main/java ]; then
+            service_count=$(find backend/service/src/main/java -name '*ServiceImpl.java' | wc -l | tr -d ' ')
+          fi
+          if [ -d backend ]; then
+            test_count=$(find backend -path '*/src/test/java/*' \( -name '*Test.java' -o -name '*IT.java' \) | wc -l | tr -d ' ')
+          fi
+
+          if [ "$controller_count" -gt 0 ] || [ "$service_count" -gt 0 ]; then
+            [ "$test_count" -gt 0 ] || {
+              echo "Backend controllers/services exist but no backend tests were found."
+              echo "Add the MVP safety suite from .claude/agent_docs/testing/testing-policy.md."
+              exit 1
+            }
+          fi
+
+          find backend -path '*/src/test/java/*' \( -iname '*Application*Test.java' -o -iname '*Health*Test.java' -o -iname '*SmokeTest.java' \) | grep -q . || {
+            echo "Add an application/health smoke test for the backend."
+            exit 1
+          }
+
+          if [ -d backend/application/src/main/java ]; then
+            for c in $(find backend/application/src/main/java -name '*Controller.java'); do
+              name=$(basename "$c" .java)
+              find backend -path '*/src/test/java/*' -name "${name}Test.java" | grep -q . || {
+                echo "Missing controller safety test: ${name}Test.java"
+                exit 1
+              }
+            done
+          fi
+
+          if [ -d backend/service/src/main/java ]; then
+            for s in $(find backend/service/src/main/java -name '*ServiceImpl.java'); do
+              name=$(basename "$s" .java | sed 's/Impl$//')
+              find backend -path '*/src/test/java/*' \( -name "${name}Test.java" -o -name "${name}ImplTest.java" \) | grep -q . || {
+                echo "Missing service unit test for: ${name}"
+                exit 1
+              }
+            done
+          fi
+
+          if [ '${{ steps.detect.outputs.has_persistence }}' = 'true' ]; then
+            find backend -path '*/src/test/java/*' \( -iname '*Liquibase*Test.java' -o -iname '*Changelog*Test.java' \) | grep -q . || {
+              echo "Persistence is enabled; add a Liquibase/changelog smoke test."
+              exit 1
+            }
+          fi
+
+      - name: Verify MVP frontend safety tests exist
+        if: steps.detect.outputs.has_frontend == 'true'
+        run: |
+          set -euo pipefail
+          test -d frontend/src || { echo "frontend/src is required"; exit 1; }
+          test_count=$(find frontend/src \( -name '*.test.ts' -o -name '*.test.tsx' \) | wc -l | tr -d ' ')
+          [ "$test_count" -gt 0 ] || {
+            echo "Frontend exists but no Vitest behavior tests were found under frontend/src."
+            echo "Add the MVP frontend safety tests from .claude/agent_docs/testing/testing-policy.md."
+            exit 1
+          }
+
+      - name: Verify Replit and local-dev runtime files
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          test -f .replit    || { echo ".replit is required for the Replit workspace run"; exit 1; }
+          test -f replit.nix || { echo "replit.nix is required for the Replit workspace toolchain"; exit 1; }
+          # docker-compose is for local-dev only; require it when persistence is used.
+          if [ '${{ steps.detect.outputs.has_persistence }}' = 'true' ]; then
+            test -f docker-compose.yml \
+              || { echo "docker-compose.yml is required for local-dev when persistence is used"; exit 1; }
+            grep -Eiq "postgres|postgresql" docker-compose.yml || { echo "PostgreSQL service required in docker-compose.yml"; exit 1; }
+            grep -q "POSTGRES_DB" docker-compose.yml || { echo "POSTGRES_DB required in docker-compose.yml"; exit 1; }
+          fi
+
+  unit-tests:
+    name: Unit tests, Checkstyle, JaCoCo
+    runs-on: ubuntu-latest
+    needs: static-checks
+    if: needs.static-checks.outputs.has_backend == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run unit tests and verify (Checkstyle + JaCoCo)
+        shell: bash
+        run: |
+          set -euo pipefail
+          . scripts/lib/coverage-phase.sh
+          phase="$(coverage_phase_read .)"
+          coverage_phase_announce "${phase}"
+          coverage_args=()
+          phase_arg="$(coverage_phase_maven_args "${phase}")"
+          [ -n "${phase_arg}" ] && coverage_args=("${phase_arg}")
+          mvn -f backend/pom.xml ${MAVEN_CLI_OPTS} -T 1C \
+            -Dgit-commit-id.skip=true "${coverage_args[@]}" clean verify
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unit-test-reports
+          path: |
+            **/target/surefire-reports/**
+            **/target/site/jacoco/**
+          if-no-files-found: ignore
+
+  integration-tests:
+    name: Integration tests with PostgreSQL
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_integration_tests == true }}
+
+    env:
+      POSTGRES_DB: app
+      POSTGRES_PORT: "5433"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      WITH_DOCKER: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name postgres \
+            -e POSTGRES_DB="${POSTGRES_DB}" \
+            -e POSTGRES_USER="${POSTGRES_USER}" \
+            -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            -p "${POSTGRES_PORT}:${POSTGRES_PORT}" \
+            postgres:16-alpine postgres -p "${POSTGRES_PORT}"
+          for i in {1..30}; do
+            if docker exec postgres pg_isready -U "${POSTGRES_USER}" -p "${POSTGRES_PORT}"; then exit 0; fi
+            sleep 2
+          done
+          docker logs postgres
+          exit 1
+
+      - name: Run integration tests
+        run: mvn -f backend/pom.xml ${MAVEN_CLI_OPTS} clean test failsafe:integration-test failsafe:verify -DskipUTs=true
+
+      - name: Stop PostgreSQL
+        if: always()
+        run: docker rm -f postgres || true
+
+      - name: Upload IT reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: integration-test-reports
+          path: |
+            **/target/failsafe-reports/**
+          if-no-files-found: ignore
+
+  frontend-checks:
+    name: Frontend OpenAPI codegen and build
+    runs-on: ubuntu-latest
+    needs: static-checks
+    if: needs.static-checks.outputs.has_frontend == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Install, generate API, build
+        run: |
+          cd frontend
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run generate:api
+          npm run typecheck --if-present
+          npm run build
+          npm test
+
+  local-dev-dry-run:
+    name: Local-dev docker-compose dry run
+    runs-on: ubuntu-latest
+    # Both deps are required: static-checks supplies the `has_backend` flag,
+    # unit-tests must pass before we spin docker-compose.
+    needs: [static-checks, unit-tests]
+    if: |
+      needs.static-checks.outputs.has_backend == 'true' &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_local_dev_dry_run == true)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Verify docker-compose file exists
+        run: |
+          test -f docker-compose.yml
+
+      - name: Validate compose config
+        run: docker compose --profile local config
+
+      - name: Start local profile
+        env:
+          CLERK_PUBLISHABLE_KEY: pk_test_ci_dummy
+          CLERK_SECRET_KEY: sk_test_ci_dummy
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci_dummy
+          VITE_CLERK_JWT_TEMPLATE: aidigital-api
+          AUTH_ALLOWED_EMAIL_DOMAIN: aidigital.com
+          AUTH_AUTHORIZED_PARTIES: http://localhost:5173,http://localhost:8080
+          AUTH_ISSUER_URI: http://localhost:8080/fake-jwks-issuer
+          AUTH_JWKS_URI: http://localhost:8080/fake-jwks-issuer/.well-known/jwks.json
+        run: docker compose --profile local up --build -d
+
+      - name: Wait for health endpoint
+        run: |
+          HEALTH_URL="http://localhost:8080${APP_CONTEXT_PATH}${LOCAL_HEALTH_PATH}"
+          echo "Checking ${HEALTH_URL}"
+          for i in {1..60}; do
+            if curl -fsS "${HEALTH_URL}"; then exit 0; fi
+            sleep 2
+          done
+          docker compose --profile local ps
+          docker compose --profile local logs
+          exit 1
+
+      - name: Verify Prometheus endpoint
+        run: |
+          PROMETHEUS_URL="http://localhost:8080${APP_CONTEXT_PATH}${LOCAL_PROMETHEUS_PATH}"
+          curl -fsS "${PROMETHEUS_URL}" > /dev/null
+
+      - name: Show docker compose logs
+        if: always()
+        run: docker compose --profile local logs || true
+
+      - name: Stop local profile
+        if: always()
+        run: docker compose --profile local down -v || true

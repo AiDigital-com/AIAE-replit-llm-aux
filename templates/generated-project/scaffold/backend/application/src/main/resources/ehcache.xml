@@ -1,0 +1,73 @@
+<eh:config
+        xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+        xmlns:eh='http://www.ehcache.org/v3'
+        xsi:schemaLocation="http://www.ehcache.org/v3 http://www.ehcache.org/schema/ehcache-core-3.0.xsd">
+
+    <!--
+      Ehcache 3 configuration for Hibernate second-level/query cache.
+      Region prefix in application.yml is "hibernate-cache", so every alias
+      below MUST start with "hibernate-cache.".
+
+      Two usage patterns:
+        1. Named query cache region — set HibernateHints.HINT_CACHE_REGION to
+           the alias (without prefix), e.g. value="findByRoleCode".
+        2. Entity class cache — alias is "hibernate-cache.<fully-qualified-class-name>".
+           The entity must also be annotated with @Cacheable or
+           @Cache(region = ..., usage = CacheConcurrencyStrategy.READ_ONLY).
+
+      With missing_cache_strategy: fail, any cached query/entity without a
+      matching alias below will fail at runtime. Add an alias before enabling
+      caching for a new query or entity.
+    -->
+
+    <eh:cache-template name="entityTemplate">
+        <eh:expiry>
+            <eh:ttl unit="hours">1</eh:ttl>
+        </eh:expiry>
+        <eh:heap>1000</eh:heap>
+    </eh:cache-template>
+
+    <eh:cache-template name="extendedEntityTemplate">
+        <eh:expiry>
+            <eh:ttl unit="days">1</eh:ttl>
+        </eh:expiry>
+        <eh:heap>1000</eh:heap>
+    </eh:cache-template>
+
+    <!-- DEFAULT CACHES (required when L2 cache is enabled) -->
+    <eh:cache alias="hibernate-cache.default-query-results-region" uses-template="entityTemplate">
+        <!-- Heap of 1 prevents accidental caching of queries without an explicit region. -->
+        <eh:heap>1</eh:heap>
+    </eh:cache>
+
+    <eh:cache alias="hibernate-cache.default-update-timestamps-region" uses-template="entityTemplate">
+        <!--
+          The update-timestamps region TTL must be longer than any query-cache TTL,
+          otherwise Hibernate may serve stale query results after an entity change.
+        -->
+        <eh:expiry>
+            <eh:ttl unit="days">1</eh:ttl>
+        </eh:expiry>
+        <eh:heap>10000</eh:heap>
+    </eh:cache>
+
+    <!--
+      APP CACHES: uncomment and add one alias per named query cache region.
+      The alias is "hibernate-cache.<HINT_CACHE_REGION value>".
+
+      <eh:cache alias="hibernate-cache.findByExampleCode" uses-template="extendedEntityTemplate">
+          <eh:heap>100</eh:heap>
+      </eh:cache>
+    -->
+
+    <!--
+      ENTITY CACHES: uncomment and add one alias per cached entity class.
+      The alias is "hibernate-cache.<fully-qualified-class-name>".
+
+      <eh:cache alias="hibernate-cache.PACKAGE_REPLACE_ME.domain.entity.ExampleEntity"
+                uses-template="entityTemplate">
+          <eh:heap>500</eh:heap>
+      </eh:cache>
+    -->
+
+</eh:config>

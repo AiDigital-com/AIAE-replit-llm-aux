@@ -1,0 +1,65 @@
+# HikariCP + JPA + Actuator baseline for generated Java backends.
+#
+# Drop this into application.yml as the default; override pool-size and
+# data-source URL per profile:
+#   - application-replit.yml → max-pool-size: 2-3, Replit PG* env vars
+#   - application-local.yml  → max-pool-size: 50 (this baseline)
+#
+# See references/application-replit.yml and references/database-url-translation.md
+# for the Replit-profile overrides.
+
+spring:
+  datasource:
+    hikari:
+      idle-timeout: 60000
+      maximum-pool-size: 50         # local-dev / handoff default; override to 2-3 on profile `replit`
+      connection-timeout: 2000
+      minimum-idle: 1
+      auto-commit: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    database: postgresql
+    properties:
+      hibernate:
+        cache:
+          use_second_level_cache: true
+          use_query_cache: true
+          region_prefix: hibernate-cache
+          region:
+            factory_class: org.hibernate.cache.jcache.JCacheRegionFactory
+        javax:
+          cache:
+            uri: ehcache.xml
+            missing_cache_strategy: fail
+            provider: org.ehcache.jsr107.EhcacheCachingProvider
+        query:
+          in_clause_parameter_padding: true
+          mutation_strategy:
+            global_temporary:
+              create_tables: false
+              drop_tables: false
+          immutable_entity_update_query_handling_mode: exception
+        criteria:
+          literal_handling_mode: bind
+        default_batch_fetch_size: 300
+      jakarta:
+        persistence:
+          sharedCache:
+            mode: ENABLE_SELECTIVE
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,prometheus,env,configprops"
+  endpoint:
+    env:
+      show-values: always
+    configprops:
+      show-values: always
+
+server:
+  servlet:
+    context-path: /some-path-by-app-name   # REPLACE with /<your-app-name>

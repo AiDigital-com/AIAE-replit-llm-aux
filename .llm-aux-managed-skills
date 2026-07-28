@@ -1,0 +1,20 @@
+# Which common skills from AIAE-llm-aux to install into both discovery registries.
+#
+# Hand-edited. This is the *selection*; `.llm-aux-manifest` is the generated
+# record of what sync actually installed. Sync only ever deletes skills recorded
+# in the manifest, so a project-owned skill can never be removed by accident.
+#
+# Removing a name here and re-running sync uninstalls that skill.
+# One skill name per line. `#` starts a comment.
+#
+# Exactly one user-facing compliance skill ships: `aiae-rule-compliance-audit`,
+# which audits against this template's known layout (CLAUDE.md, .claude/rules,
+# .claude/agent_docs). The generic `rule-compliance-audit` in AIAE-llm-aux
+# discovers unknown rule layouts — valuable for other consumers, redundant here,
+# and its trigger list was word-for-word identical, so no agent could choose
+# between them. It stays upstream and is deliberately not selected.
+
+verification-gate
+production-code-review
+fullstack-performance-audit
+task-workflow

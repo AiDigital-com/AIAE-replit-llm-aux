@@ -1,0 +1,88 @@
+/*
+ * Elevate design tokens.
+ * No component CSS may hard-code colors; use the semantic aliases below.
+ */
+
+:root {
+    /* Raw HSL tokens */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 4%;
+    --primary: 239 100% 43%;
+    --primary-hover: 239 100% 38%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 78% 98%;
+    --accent: 237 76% 94%;
+    --muted-foreground: 0 0% 54%;
+    --label-muted: 226 25% 68%;
+    --header-text: 230 17% 22%;
+    --border: 237 76% 94%;
+    --ring: 239 100% 43%;
+
+    --status-success: 134 100% 30%;
+    --status-info: 234 100% 43%;
+    --status-warning: 52 100% 37%;
+    --status-draft: 0 0% 28%;
+    --status-error: 0 72% 45%;
+
+    --chart-cyan: 190 65% 54%;
+    --chart-lime: 76 75% 60%;
+    --chart-purple: 263 47% 58%;
+    --chart-pink: 319 75% 77%;
+    --chart-grey: 0 0% 72%;
+    --chart-sky: 219 74% 52%;
+    --chart-magenta: 346 69% 52%;
+
+    /* Spacing scale */
+    --space-1: 0.25rem;
+    --space-1-5: 0.375rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-6: 1.5rem;
+    --space-10: 2.5rem;
+
+    /* Radii */
+    --radius-sm: 0.5rem;
+    --radius-md: 0.625rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 0.75rem;
+    --radius-full: 999rem;
+
+    /* Text sizes */
+    --text-badge: 0.6875rem;
+    --text-pill: 0.75rem;
+    --text-body: 0.8125rem;
+    --text-table-head: 0.875rem;
+    --text-subhead: 1rem;
+    --text-section: 1.125rem;
+    --text-page-title: 2rem;
+
+    /* Layout/control scale */
+    --content-max-width: 79.0625rem;
+    --control-height: 2.5rem;
+
+    /* Compatibility aliases consumed by scaffold blocks */
+    --text-sm: var(--text-pill);
+    --text-base: var(--text-body);
+    --text-lg: var(--text-subhead);
+    --text-xl: var(--text-section);
+
+    --surface-default: hsl(var(--background));
+    --surface-muted: hsl(var(--secondary));
+    --surface-elevated: hsl(var(--background));
+    --surface-accent: hsl(var(--accent));
+
+    --text-default: hsl(var(--foreground));
+    --text-muted: hsl(var(--muted-foreground));
+    --text-label: hsl(var(--label-muted));
+    --text-heading: hsl(var(--header-text));
+    --text-on-accent: hsl(var(--primary-foreground));
+
+    --accent-primary: hsl(var(--primary));
+    --accent-primary-hover: hsl(var(--primary-hover));
+    --accent-danger: hsl(var(--status-error));
+
+    --border-default: hsl(var(--border));
+    --focus-ring: hsl(var(--ring) / 40%);
+    --shadow-soft: 0 0.125rem 0.5rem hsl(var(--foreground) / 6%);
+}

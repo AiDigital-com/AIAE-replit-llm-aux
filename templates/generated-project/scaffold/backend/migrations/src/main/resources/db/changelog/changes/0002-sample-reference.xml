@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+      ═══════════════════════════════════════════════════════════════════════
+      SCAFFOLD EXAMPLE — REFERENCE ONLY. DELETE this file AND the matching
+      <include> line from db.changelog-master.xml before the first real
+      aggregate lands. Run `scripts/strip-scaffold-samples.sh` for one-shot
+      removal. See structure/near-production-project-structure.md →
+      "Scaffold sample aggregate (reference fixture — MUST be stripped)".
+      ═══════════════════════════════════════════════════════════════════════
+      Reference aggregate used only to prove the scaffold compiles and boots.
+    -->
+    <changeSet id="sample-reference-initial" author="agent">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="samples"/>
+            </not>
+        </preConditions>
+
+        <createTable tableName="samples">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+</databaseChangeLog>

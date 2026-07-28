@@ -1,0 +1,59 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# GSD is an optional local Claude Code tool. Do not vendor its generated
+# runtime; install it explicitly when needed. Project rules and custom skills
+# under agent_docs/, rules/, skills/, and tasks/ remain committed.
+.claude/agents/
+.claude/commands/
+.claude/gsd-core/
+.claude/hooks/
+.claude/scripts/
+.claude/.gsd-profile
+.claude/gsd-file-manifest.json
+.claude/package.json
+.claude/settings.json
+.claude/settings.local.json
+.claude/gsd-install-state.json
+
+# OS
+.DS_Store
+
+# Internal user-guide articles are maintained outside the public repository.
+# Keep local working copies without publishing them.
+docs/user-guide/start-from-scratch-on-replit.md
+docs/user-guide/start-from-scratch-with-claude.md
+docs/user-guide/use-with-an-existing-project.md
+
+# Python cache artifacts from local helper scripts
+__pycache__/
+*.pyc
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*service-account*.json
+*credentials*.json
+
+# Replit local state
+.replit.local
+.cache/
+.upm/
+.config/
+.local/
+.breakpoints
+.upm.lock
+
+# Node / build outputs that may appear if a generated app is opened in the
+# same workspace (the template itself ships no buildable code)
+node_modules/
+dist/
+target/
+generated-sources/
+templates/generated-project/scaffold/backend/application/src/main/resources/static/
+
+# sync-llm-aux cache
+.llm-aux-cache/

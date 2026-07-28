@@ -1,0 +1,66 @@
+# Replit workspace config — keys only. Rationale: replit.md → "System
+# Architecture". STACK LOCK: custom_instruction/instructions.md.
+
+modules = ["java-21", "nodejs-22", "postgresql-16"]
+hidden  = [".idea", ".vscode", "target", "node_modules", "generated-sources", ".cache"]
+
+# Boot hook — untracks control plane from git + removes auto-injected
+# Python files. Skipping leaks `templates/`, `custom_instruction/` to company repo.
+onBoot = "bash templates/generated-project/scaffold/scripts/setup-project.sh"
+
+[nix]
+channel = "stable-24_11"
+
+# Files required for a valid fork. Full integrity check in .github/workflows/ci.yml.
+[gitHubImport]
+requiredFiles = [
+    ".replit",
+    "replit.nix",
+    "replit.md",
+    "custom_instruction/instructions.md",
+    ".agents/skills/backend-java-feature/SKILL.md",
+    "templates/generated-project/scaffold/backend/pom.xml",
+    "templates/generated-project/scaffold/scripts/setup-project.sh",
+]
+
+# === Deployment === Reserved VM (`gce`), not Autoscale. Build + run wrapped
+# in scripts so .replit, README, CI, and Dockerfile call the same commands.
+[deployment]
+deploymentTarget = "gce"
+build = ["bash", "scripts/replit-build.sh"]
+run   = ["bash", "scripts/replit-run.sh"]
+
+# === Ports === Backend 5000 → externalPort 80 is the single public surface
+# (Reserved-VM Deployment supports ONE externalPort). Vite dev preview lives
+# on 5173 but is workspace-only: the Replit workspace pane auto-detects the
+# listening port — no [[ports]] entry needed (and adding one tries to expose
+# 5173 externally even in deployment where Vite isn't running). NEVER swap
+# backend onto 5173 — see backend SKILL "Port architecture lock".
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+# === Workspace env === [env] does NOT propagate to Deployments; copy
+# CLERK_*/AUTH_*/USAGE_LOG_* and Replit Postgres PG* vars into Deployment
+# Secrets if Replit does not auto-propagate them. JAVA_HOME unset —
+# `pkgs.jdk21` provides JDK 21 on PATH.
+[env]
+PORT = "5000"
+SPRING_PROFILES_ACTIVE = "replit"
+
+# === Workflows === Run = backend + Vite parallel. "Not generated yet"
+# keeps workspace bootable pre-scaffold. FATAL guard rejects Python files.
+[workflows]
+runButton = "Run"
+
+[[workflows.workflow]]
+name = "Run"
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash -lc 'source scripts/replit-env.sh; if [ -f backend/pom.xml ]; then mvn -f backend/pom.xml -DskipTests -Dskip.frontend=true install && mvn -f backend/application/pom.xml -DskipTests -Dskip.frontend=true spring-boot:run; elif [ -f requirements.txt ] || [ -f Pipfile ] || [ -f pyproject.toml ] || [ -f main.py ] || [ -f uv.lock ]; then echo \"[FATAL] Python backend detected - delete main.py/pyproject.toml/uv.lock/requirements.txt and regenerate as Spring Boot.\"; exit 1; else echo \"[backend] Not generated yet - ask Agent to scaffold backend/ from templates/generated-project/scaffold/.\"; fi'"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash -lc 'source scripts/replit-env.sh; if [ -f frontend/package.json ]; then cd frontend && { [ -f package-lock.json ] && npm ci || npm install; } && npm run generate:api && npm run dev -- --host 0.0.0.0 --port 5173; else echo \"[frontend] Not generated yet - ask Agent to scaffold frontend/ from templates/generated-project/scaffold/frontend/.\"; fi'"

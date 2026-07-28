@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Self-contained cache-management module. Owns the GENERIC, app-agnostic
+  multi-node cache-invalidation MECHANISM only: a write publishes a
+  CacheInvalidationEvent to shared storage; every node polls by monotonic
+  database event ID on a fixed delay (ScheduledCacheUpdater) and clears the
+  cache regions registered for the changed class (CacheService +
+  CacheUpdaterService over all CacheManager beans). Idempotent clears make
+  replay harmless.
+
+  This module ships NO application wiring. The APPLICATION supplies:
+    - a CacheNamesByClassRegistry impl (which regions each tracked class
+      maps to);
+    - a DB-backed CacheInvalidationEventService (the scaffold supplies the
+      default JPA implementation in domain/service);
+    - the CacheManager beans whose regions are evictable — including a
+      bridge CacheManager that exposes the Hibernate second-level (L2)
+      cache so L2 regions are reachable by name;
+    - publishUpdateEvent(...) calls inside the same transaction as every
+      mutation of a tracked entity.
+
+  Database migrations live in the `migrations` module — NOT here. Liquibase
+  changelogs for the cache-invalidation event table belong in
+  `backend/migrations/src/main/resources/db/changelog/`, single-sourced with every
+  other migration; this feature module never carries its own changelog.
+
+  The scaffold application enables scheduling and service/ depends on this
+  module, so the mechanism is active in every generated backend.
+
+  Removal: drop <module>cache-management</module> from backend/pom.xml,
+  drop the dependency edge from whichever module depends on it, delete the
+  application's registry/event-service/CacheManager-bridge wiring and the
+  publishUpdateEvent(...) calls, and remove the event-table changelog
+  <include> from db.changelog-master.xml.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>PACKAGE_REPLACE_ME</groupId>
+        <artifactId>app-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>cache-management</artifactId>
+    <name>Replit MVP — cache-management</name>
+
+    <!-- Self-contained, removable feature. Must NOT depend on any other internal
+         module (domain/service/application). The generic mechanism lives here;
+         the application supplies the registry, event store, and CacheManagers. -->
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- Direct framework APIs used by the reusable cache mechanism. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+
+        <!-- Test-only direct dependencies. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

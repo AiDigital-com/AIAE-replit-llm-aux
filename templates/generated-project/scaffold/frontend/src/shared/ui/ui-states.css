@@ -1,0 +1,15 @@
+.ui-state {
+    margin: var(--space-4) 0;
+    min-width: 0;
+    font-size: var(--text-base);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.ui-state--error {
+    color: var(--accent-danger);
+}
+
+.ui-state--empty {
+    font-style: italic;
+}

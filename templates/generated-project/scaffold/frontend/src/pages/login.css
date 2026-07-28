@@ -1,0 +1,79 @@
+.login {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: var(--space-10) var(--space-6);
+    background:
+        radial-gradient(circle at top left, hsl(var(--primary) / 12%), transparent 34%),
+        linear-gradient(135deg, var(--surface-default), var(--surface-muted));
+}
+
+.login__card {
+    width: min(100%, 32.5rem);
+    min-width: 0;
+    padding: var(--space-10);
+    border: 0.0625rem solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow-soft);
+}
+
+.login__eyebrow {
+    margin: 0;
+    color: var(--accent-primary);
+    font-size: var(--text-badge);
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.login__title {
+    margin: var(--space-4) 0 var(--space-2);
+    color: var(--text-heading);
+    font-size: var(--text-page-title);
+    font-weight: 700;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+.login__subtitle {
+    margin: 0 0 var(--space-6);
+    color: var(--text-muted);
+    font-size: var(--text-table-head);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.login__clerk-root,
+.login__clerk-box {
+    width: 100%;
+}
+
+.login__clerk-box {
+    box-shadow: none;
+}
+
+.login__clerk-card {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+}
+
+.login__clerk-header {
+    display: none;
+}
+
+.login__clerk-footer {
+    background: transparent;
+}
+
+@media (max-width: 37.5rem) {
+    .login {
+        padding: var(--space-6) var(--space-4);
+    }
+
+    .login__card {
+        padding: var(--space-6);
+    }
+}

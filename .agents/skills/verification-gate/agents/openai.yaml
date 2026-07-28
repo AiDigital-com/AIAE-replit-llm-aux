@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verification Gate"
+  short_description: "Verify evidence before completion claims"
+  default_prompt: "Verify the current work with fresh, scope-appropriate evidence before declaring it complete."

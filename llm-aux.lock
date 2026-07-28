@@ -1,0 +1,26 @@
+# llm-aux.lock — pins the AIAE-llm-aux revision that generated .claude/skills/ and .agents/skills/.
+#
+# `revision` is the contract, not `repository`. sync-llm-aux.sh verifies that the
+# extracted revision equals this SHA and refuses to proceed otherwise, so the
+# source is interchangeable: a git remote, a local sibling checkout, or a mirror
+# all produce identical output or fail loudly.
+#
+# Source resolution order (see scripts/sync-llm-aux.sh):
+#   1. $LLM_AUX_SOURCE          — explicit override, for offline or forked work
+#   2. ../AIAE-llm-aux          — a sibling checkout, the normal local setup
+#   3. repository below         — the shared remote
+#
+# Never put a machine-specific absolute path in `repository`; sync rejects it.
+# Use $LLM_AUX_SOURCE for local paths instead.
+#
+# To upgrade:
+#   bash scripts/sync-llm-aux.sh --update-lock   # rewrites `revision`
+#   bash scripts/sync-llm-aux.sh                 # regenerates both registries
+#   git add llm-aux.lock .claude/.llm-aux-manifest .agents/.llm-aux-manifest .claude/skills .agents/skills
+#
+# To roll back: set `revision` to the previous SHA and re-run sync. That is the
+# entire rollback procedure — no other state is involved.
+
+repository=https://github.com/AiDigital-com/AIAE-llm-aux.git
+revision=d8f00e9689669785367c31e97fc5ed2229e7eb0d
+version=0.2.0

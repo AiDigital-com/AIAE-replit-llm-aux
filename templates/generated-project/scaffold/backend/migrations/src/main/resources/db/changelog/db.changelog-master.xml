@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <include file="db/changelog/changes/0001-usage-events.xml"/>
+    <!--
+      SCAFFOLD EXAMPLE include — DELETE the line below together with the
+      0002-sample-reference.xml file before the first real changelog lands.
+      Liquibase fails at boot if the include stays while the file is removed.
+      Run `scripts/strip-scaffold-samples.sh` for one-shot removal.
+    -->
+    <include file="db/changelog/changes/0002-sample-reference.xml"/>
+    <include file="db/changelog/changes/0003-cache-invalidation.xml"/>
+    <!-- Add new changelogs above this line in numerically increasing order. -->
+
+</databaseChangeLog>
