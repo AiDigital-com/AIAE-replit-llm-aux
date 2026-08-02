@@ -1,0 +1,177 @@
+# <APP-NAME> Architecture Overview
+
+This is the canonical description of the product's implemented architecture.
+Keep it concise and evidence-based. Update it when a change affects a runtime
+boundary, module ownership, data flow, integration, deployment model, or
+cross-cutting concern. Detailed engineering rules remain in `.claude/`; do not
+duplicate those rulebooks here.
+
+<!-- ARCHITECTURE-TODO: Replace the generic product context and verify every section against the implemented repository before engineering handoff. -->
+
+## Document status
+
+- Owner: product engineering team
+- Lifecycle phase: MVP
+- Last verified against: initial scaffold
+- Verification evidence: `bash scripts/local-verify.sh`
+- Cache status: enabled
+- MVP usage telemetry: enabled during MVP
+
+## Product and system context
+
+<!-- ARCHITECTURE-TODO: Name the real users, business capability, system boundary, and external systems. Remove actors or dependencies that do not exist. -->
+
+```mermaid
+flowchart LR
+    user["Product user"] -->|HTTPS| app["<APP-NAME>"]
+    app -->|OIDC / JWT| clerk["Clerk with Google SSO"]
+    app -->|SQL| postgres["PostgreSQL"]
+    app -.->|Document real calls| external["External systems"]
+```
+
+The application is a React single-page application backed by a Spring Boot
+API. The browser uses `BrowserRouter`; application routes resolve through the
+SPA fallback when the built frontend is served by Spring Boot.
+
+## Product-specific evidence
+
+- Product capability: ARCHITECTURE-TODO
+- Primary users: ARCHITECTURE-TODO
+- Primary production flow: ARCHITECTURE-TODO
+- Evidence path: `ARCHITECTURE-TODO/product-source-1`
+- Evidence path: `ARCHITECTURE-TODO/product-source-2`
+
+Replace these values with concise product facts and at least two existing
+frontend or backend source paths that implement the described capability. The
+paths make the overview auditable; they are not an exhaustive source map.
+
+## Runtime and deployment
+
+| Environment | Frontend | Backend | Data |
+|---|---|---|---|
+| Replit development | Vite development server | Spring Boot | Replit PostgreSQL |
+| Replit deployment | Built SPA served by Spring Boot | Reserved VM, external port 80 to application port 5000 | Replit PostgreSQL |
+| Local development | Vite or Docker nginx container | JVM or Docker container on port 8080 | Docker PostgreSQL |
+
+<!-- ARCHITECTURE-TODO: Record the actual production target and remove deployment variants the product does not support. -->
+
+- Evidence: `ARCHITECTURE-TODO/runtime-deployment`
+
+## Repository and module boundaries
+
+| Area | Responsibility | May depend on |
+|---|---|---|
+| `frontend/` | React UI, routing, auth integration, typed API consumption | Generated OpenAPI types and the shared API client |
+| `backend/application` | Runtime composition, security, OpenAPI controllers, exception translation, SPA hosting | `service`, `observability`, runtime infrastructure modules |
+| `backend/service` | Business use cases, validation, authorization, orchestration, mapping | Entity services and outbound integration contracts |
+| `backend/domain` | JPA entities and repositories | Persistence APIs only |
+| `backend/migrations` | Liquibase changelogs | No production Java modules |
+| `backend/observability` | Reusable outbound-call metrics | Metrics APIs only |
+| `backend/cache-management` | Optional cache registry, warm-up, and multi-node invalidation | Domain cache event persistence |
+| `backend/event-logging-to-db-feature` | Temporary MVP feedback telemetry; removed at engineering handoff | Application service annotations and PostgreSQL during MVP only |
+
+Controllers implement generated OpenAPI interfaces and delegate to services.
+Repositories are accessed only through their paired entity services. Cross-
+entity orchestration depends on services, not repositories.
+
+<!-- ARCHITECTURE-TODO: Add, remove, or rename modules to match backend/pom.xml, remove the MVP event-logging row before handoff, and explain any deliberate boundary exception. Include integration-pack modules such as backend/external-services only when installed. -->
+
+- Evidence: `ARCHITECTURE-TODO/module-boundaries`
+
+## Primary runtime flows
+
+### Authenticated API request
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant C as Clerk
+    participant A as Spring API
+    participant S as Service layer
+    participant D as PostgreSQL
+    B->>C: Sign in with Google
+    C-->>B: Session / JWT
+    B->>A: Typed API request with Bearer JWT
+    A->>A: Validate issuer, audience, authorized party and company domain
+    A->>S: Validated request model and authenticated user
+    S->>D: Transactional persistence through entity service
+    D-->>S: Result
+    S-->>A: Response model
+    A-->>B: OpenAPI response
+```
+
+<!-- ARCHITECTURE-TODO: Document the product's two or three most important flows, including background work and failure behavior where applicable. -->
+
+- Evidence: `ARCHITECTURE-TODO/primary-flow`
+
+## API and security boundaries
+
+- OpenAPI YAML is the API source of truth. Backend interfaces and frontend
+  types are generated from it.
+- Request constraints belong in the OpenAPI contract and are enforced at the
+  controller boundary; business validation remains in services/validators.
+- Clerk with Google SSO authenticates users. The backend validates JWT issuer,
+  signature, audience, authorized party, and the configured company domain.
+- Secrets remain in Replit Secrets, local `.env`, or the target secret manager;
+  they are never compiled into frontend assets or committed.
+
+<!-- ARCHITECTURE-TODO: Record real authorization roles, tenant boundaries, public endpoints, sensitive data, and trust assumptions. -->
+
+- Evidence: `ARCHITECTURE-TODO/api-security`
+
+## Data ownership and migrations
+
+- PostgreSQL is the system of record unless a section below explicitly names a
+  different owner.
+- `backend/migrations` owns ordered Liquibase changesets with direct
+  preconditions. Application startup applies the master changelog.
+- JPA identifiers use `Long`; schema identifiers use `BIGINT`; unbounded text
+  uses PostgreSQL `TEXT`.
+
+<!-- ARCHITECTURE-TODO: List business data stores, important entities, retention requirements, migration/backfill strategy, and data owned by external systems. -->
+
+- Evidence: `ARCHITECTURE-TODO/data-migrations`
+
+## Caching and consistency
+
+Caching is optional. When enabled, document every cached value, its source of
+truth, TTL/size bound, mutation path, and invalidation behavior. A multi-node
+deployment must use persisted invalidation events plus scheduled replay so an
+update on one node invalidates affected entries on every node. If the product
+does not use caching, remove `backend/cache-management` with
+`bash scripts/remove-cache-management.sh --apply` and state that explicitly.
+
+<!-- ARCHITECTURE-TODO: State whether caching is enabled and describe the verified cache topology and consistency guarantees. -->
+
+- Evidence: `ARCHITECTURE-TODO/caching`
+
+## External integrations
+
+| Integration | Purpose | Protocol/authentication | Failure and retry policy |
+|---|---|---|---|
+| Clerk | User authentication | OIDC/JWT | Fail closed when token validation or required auth configuration fails |
+| PostgreSQL | Application persistence | JDBC/TLS in managed environments | Transaction rollback; bounded pool and query timeouts |
+| <!-- ARCHITECTURE-TODO: integration --> | <!-- purpose --> | <!-- protocol/auth --> | <!-- timeout/retry/idempotency --> |
+
+- Evidence: `ARCHITECTURE-TODO/integrations`
+
+## Observability and operations
+
+- Structured application logs go to stdout and carry a correlation ID.
+- Actuator exposes health and Prometheus metrics.
+- Outbound calls use low-cardinality metrics and explicit timeouts.
+- HTTP logging is metadata-only in production and masks sensitive values.
+
+<!-- ARCHITECTURE-TODO: Record dashboards, alerts, SLOs, operational ownership, backup/restore, and incident dependencies that actually exist. -->
+
+- Evidence: `ARCHITECTURE-TODO/observability`
+
+## Decisions, constraints, and known risks
+
+| Decision or constraint | Reason | Consequence / follow-up |
+|---|---|---|
+| Contract-first OpenAPI | One backend/frontend API contract | Generated sources must not be edited |
+| BrowserRouter | Real client-side routes with direct-link support | Deployment must preserve SPA fallback behavior |
+| <!-- ARCHITECTURE-TODO: decision --> | <!-- reason --> | <!-- consequence --> |
+
+<!-- ARCHITECTURE-TODO: Replace scaffold limitations with verified product risks and link ADRs or tickets for deliberate deviations. -->

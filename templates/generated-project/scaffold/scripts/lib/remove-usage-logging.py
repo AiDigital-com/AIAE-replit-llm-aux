@@ -5,11 +5,11 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 import sys
 from pathlib import Path
 
 from liquibase_dependency_guard import find_active_token_references
+from removal_transaction import apply_removal_transaction
 
 
 LOG_USAGE_IMPORT = re.compile(r"^[ \t]*import\s+[\w.]+\.usagelogging\.LogUsage;\s*\n", re.MULTILINE)
@@ -61,6 +61,22 @@ def prepare(root: Path) -> tuple[dict[Path, str], tuple[Path, ...]]:
         raise RuntimeError("event-logging-to-db-feature is already absent")
 
     changes: dict[Path, str] = {}
+
+    architecture = root / "docs/architecture-overview.md"
+    architecture_text = read(architecture)
+    architecture_text = replace_once(
+        architecture_text,
+        r"^- MVP usage telemetry: enabled during MVP$",
+        "- MVP usage telemetry: removed",
+        "active MVP telemetry architecture status",
+    )
+    architecture_text = replace_once(
+        architecture_text,
+        r"^\| `backend/event-logging-to-db-feature` \|[^\n]*\n",
+        "",
+        "MVP telemetry architecture module row",
+    )
+    changes[architecture] = architecture_text
 
     parent = backend / "pom.xml"
     parent_text = read(parent)
@@ -252,15 +268,16 @@ def main() -> int:
         print("remove-usage-logging: DRY RUN — re-run with --apply")
         return 0
 
-    for path, content in changes.items():
-        path.write_text(content, encoding="utf-8")
-    for path in delete_paths:
-        if path.is_dir():
-            shutil.rmtree(path)
-        else:
-            path.unlink()
+    try:
+        apply_removal_transaction(root, changes, delete_paths)
+    except (OSError, RuntimeError) as error:
+        print(f"remove-usage-logging: FAILED — {error}", file=sys.stderr)
+        return 1
 
-    print("remove-usage-logging: removed module, call sites, configuration, and migration")
+    print(
+        "remove-usage-logging: removed module, call sites, configuration, "
+        "migration, and active architecture facts"
+    )
     return 0
 
 

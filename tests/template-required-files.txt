@@ -8,6 +8,9 @@ llm-aux.lock
 .mcp.json
 .claude/tasks/README.md
 .claude/skills/project-init/SKILL.md
+.claude/agent_docs/agent-operating-model.md
+.claude/skills/local-preview/SKILL.md
+.agents/skills/local-preview/SKILL.md
 .agents/skills/verification-gate/SKILL.md
 .claude/skills/verification-gate/SKILL.md
 docs/user-guide/README.md
@@ -29,6 +32,7 @@ templates/generated-project/.github/workflows/ci.yml
 templates/generated-project/scaffold/AGENTS.md.template
 templates/generated-project/scaffold/replit.md.template
 templates/generated-project/scaffold/README.md.template
+templates/generated-project/scaffold/docs/architecture-overview.md.template
 templates/generated-project/scaffold/.env.example
 templates/generated-project/scaffold/.template-phase
 templates/generated-project/scaffold/.replit
@@ -53,7 +57,9 @@ templates/generated-project/scaffold/scripts/remove-cache-management.sh
 templates/generated-project/scaffold/scripts/remove-usage-logging.sh
 templates/generated-project/scaffold/scripts/lib/remove-cache-management.py
 templates/generated-project/scaffold/scripts/lib/remove-usage-logging.py
+templates/generated-project/scaffold/scripts/lib/removal_transaction.py
 templates/generated-project/scaffold/scripts/lib/liquibase_dependency_guard.py
+templates/generated-project/scaffold/scripts/lib/check-architecture-overview.sh
 templates/generated-project/scaffold/scripts/prepare-engineering-handoff.sh
 templates/generated-project/scaffold/scripts/local-verify.sh
 templates/generated-project/scaffold/scripts/verify-gates.sh
@@ -65,6 +71,7 @@ templates/generated-project/scaffold/scripts/docker-context-path-smoke.sh
 # Focused regression coverage
 tests/gates/run.sh
 tests/gates/lib/assert.sh
+tests/gates/architecture-overview/test.sh
 tests/gates/api-client-paths/test.sh
 tests/gates/liquibase-preconditions/test.sh
 tests/gates/payload-portability/test.sh

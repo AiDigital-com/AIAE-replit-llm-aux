@@ -12,7 +12,7 @@ Runs *after* `mvp-safety-review`; does not duplicate its checks.
 
 ## Prerequisites
 
-Two, both blocking.
+Three, all blocking.
 
 1. **Coverage is finalized.** `.template-phase` must read `engineering`, and the
    strict gate (0.80 line / 0.70 branch) must pass with a bare
@@ -25,6 +25,23 @@ Two, both blocking.
 2. **`mvp-safety-review` passes.** All of its checks, before this skill applies.
    If that skill is not installed here, treat its absence as a blocker and say
    so — do not substitute an ad-hoc review for the publish gate.
+
+3. **The product architecture overview is finalized.**
+   `docs/architecture-overview.md` must describe the repository's current
+   implemented state, not the original scaffold or an intended future state. Verify
+   its system context, module boundaries, primary runtime flows, API/security,
+   data ownership, caching, integrations, deployment, observability, and known
+   risks against the live code and configuration. Remove every
+   `ARCHITECTURE-TODO` marker, record the required product facts, cite at least
+   two existing implementation paths under `frontend/src` or backend module
+   `src` trees, and run
+   `bash scripts/lib/check-architecture-overview.sh`. Missing, incomplete, or
+   contradicted architecture documentation blocks handoff.
+   When `--apply` removes the known MVP telemetry module, the handoff script
+   also changes its managed architecture status to `removed` and deletes that
+   module's active-row entry before verifying the final tree. Recheck the rest
+   of the document against the post-cleanup state; no other architecture
+   content is rewritten automatically.
 
 ## Remove MVP usage logging
 
@@ -86,20 +103,52 @@ The resulting repository is a clean engineering/customer transfer repo with
 only the Claude Code surface intact. Do not skip this step — a handed-off repo
 must not reference Replit template internals.
 
+## Independent final review convergence
+
+After the post-cleanup application passes deterministic verification, run a
+fresh independent production review of the **cumulative relevant repository
+state**, not only the latest diff or the cleanup commit.
+
+When the runtime supports model routing, use Claude Opus (or the strongest
+available review model) for this role. Where those exact effort controls exist,
+use Opus at least at `extra` or Fable at `high`. Start it with clean context
+containing
+the business goal/ticket, acceptance criteria, repository rules,
+`docs/architecture-overview.md`, final tree, and verification evidence. Do not
+claim a particular model was used unless the runtime confirms it.
+
+If the reviewer reports verified material findings:
+
+1. route them to the implementation role (prefer Claude Sonnet at high effort
+   when supported);
+2. let the technical decision role resolve the fix—do not ask the business user
+   to choose the implementation;
+3. rerun all affected deterministic checks;
+4. start a **new clean independent reviewer** against the cumulative state.
+
+Repeat until approved or genuinely blocked by missing credentials/access,
+safety, an irreversible product action, or missing business behavior. Record
+each review/fix pass in the handoff report. Do not run this expensive convergence
+loop for every trivial edit; it is mandatory for engineering handoff.
+
+
 ## Required handoff report
 
 Record the `mvp-safety-review` result, usage-logging removal result, validation
 commands and outcomes, the handoff-script dry-run/apply result, removed Replit
 artifacts, preserved Claude artifacts, known limitations, and any skipped
-environment checks. Do not claim Docker or deployment validation without
-evidence.
+environment checks. Link to `docs/architecture-overview.md` and record the
+revision it was verified against; do not duplicate an architecture summary in
+the report. Do not claim Docker or deployment validation without evidence.
 
 ## Handoff package
 
 - [ ] README: purpose, owner, run/deploy steps for both Replit and local-dev,
       API overview, Swagger/OpenAPI links, known limitations.
 - [ ] `.env.example` with safe placeholders for every consumed variable.
-- [ ] Architecture summary (one page).
+- [ ] `docs/architecture-overview.md` is the single product-architecture
+      summary, matches the final repository state, contains no
+      `ARCHITECTURE-TODO` markers, and passes its validation gate.
 - [ ] List of mocked components and what must replace each one.
 - [ ] Data source inventory lists all remaining external APIs and records
       whether an existing MVP `usage_events` table was retained, archived, or

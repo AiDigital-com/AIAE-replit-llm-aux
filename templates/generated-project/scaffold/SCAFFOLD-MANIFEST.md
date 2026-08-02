@@ -20,6 +20,9 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | `.husky/pre-commit` | Root Git hook installed by `frontend` prepare script; runs `npm --prefix frontend run lint` |
 | `CLAUDE.md`, `.claude/` | Materialized shared engineering rules and focused skills; GSD runtime remains opt-in |
 | `AI-DEVELOPMENT-GUIDE.md` | Visible decision guide for focused skills vs optional GSD |
+| `.claude/agent_docs/agent-operating-model.md` | Business/technical decision ownership, model-role preferences, local preview, and fresh final-review convergence |
+| `.claude/skills/local-preview/`, `.agents/skills/local-preview/` | Project-specific workflow that prepares safe demo fixtures and starts a verified local preview |
+| `docs/architecture-overview.md` | Canonical product-specific architecture, generated from the tracked template and required to be finalized before engineering handoff |
 
 ## Backend (copy from scaffold/backend/)
 
@@ -76,6 +79,7 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | `strip-scaffold-samples.sh` | Remove reference sample aggregate |
 | `remove-cache-management.sh` | Remove L2 cache and cross-node invalidation together for projects with no cache |
 | `remove-usage-logging.sh` | Remove MVP feedback telemetry at engineering handoff |
+| `scripts/lib/removal_transaction.py` | Applies optional-feature removals with atomic file replacement and rollback on ordinary failures |
 | `scripts/lib/liquibase_dependency_guard.py` | Blocks feature removal when active later changelogs still depend on its tables |
 | `structure-lint.sh` | Architecture grep gate (`--scaffold` for template source) |
 | `verify-gates.sh` | Shared runtime/publish grep gate (CI + local-verify) |
@@ -86,6 +90,7 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | `scripts/lib/check-production-current-time.sh` | Rejects direct production `*.now()` calls in app-owned backend modules; use `CurrentTime` |
 | `scripts/lib/check-production-manual-mapping.sh` | Rejects `new *Entity()` plus setter-chain manual mapping; use MapStruct |
 | `scripts/lib/check-service-contract-quality.sh` | Rejects undocumented service contracts and oversized ServiceImpl classes |
+| `scripts/lib/check-architecture-overview.sh` | Requires the canonical product architecture sections and rejects unresolved markers in engineering phase |
 | `local-verify.sh` | Pre-push: lint + gates + mvn verify + frontend test/build |
 | `ci-verify-scaffold.sh` | Template CI: materialize → strip samples → full verify |
 | `replit-build.sh` / `replit-run.sh` | Deployment |

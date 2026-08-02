@@ -6,14 +6,18 @@ description: Multi-role iterative enterprise development workflow with context-i
 <!--
 Generated file. Do not edit directly.
 Source: AIAE-llm-aux/skills/task-workflow/SKILL.md.template
-Revision: d8f00e9689669785367c31e97fc5ed2229e7eb0d
+Revision: 690a9748657adf81d01702dafa2c7ecc8afcf5c5
 Target: agents
 -->
 
 
 Run a structured multi-role enterprise development workflow for: **$ARGUMENTS**.
 If this runtime does not expand `$ARGUMENTS`, use the user's latest request as
-the task description and ask one concise question only when it is ambiguous.
+the task description. Do not ask the user to resolve technical ambiguity: the
+analytic role must choose the best option allowed by repository rules and
+record its rationale. Ask one concise question only when the business outcome
+is materially ambiguous, required access is missing, or a safety/destructive
+boundary cannot be resolved from repository evidence.
 
 Arguments: `<task ID or short description> [| <context prompt for the analytic role>] [| mode: <plan|execute|autonomous>]`.
 
@@ -79,6 +83,10 @@ Describe the current behavior and the problem to solve.
 
 ### 2. Acceptance Criteria
 Each item starts with `[ ]` and is testable.
+
+Translate technical choices into acceptance criteria yourself. Ask the user
+about business behavior or priority, not frameworks, persistence mechanisms,
+API mechanics, caching, or test strategy.
 
 ### 3. Step-by-Step Implementation Plan
 Numbered steps. Each step names the exact file paths to modify or create and
@@ -171,6 +179,9 @@ Write `.claude/tasks/<task>/review.md` with:
 If the review requests changes, return to the Developer role with the report as
 mandatory input.
 
+This is the focused change review. It does not replace the clean cumulative
+review in Step 5 when that stage is required.
+
 ## Step 4 — Tester role
 
 Read `.claude/tasks/<task>/dev-summary.md` and run tests for the affected
@@ -190,15 +201,52 @@ Write `.claude/tasks/<task>/verification.md` with:
 
 If tests fail, return to the Developer role with the report as mandatory input.
 
+## Step 5 — Independent final review convergence
+
+Run this stage before an engineering handoff, a production-ready claim, or
+completion of substantial cross-cutting work involving architecture, security,
+authorization, data, API compatibility, concurrency, external integrations, or
+deployment. Small low-risk edits may stop after Steps 3 and 4; record why the
+final convergence stage was not required.
+
+Start a **new reviewer with clean context**. Do not reuse the focused reviewer
+from Step 3. Give the reviewer:
+
+- the original business task and acceptance criteria;
+- the repository rules and architecture overview;
+- the cumulative relevant repository state, not only the latest diff;
+- `plan.md`, `dev-summary.md`, `review.md`, and `verification.md`;
+- deterministic verification evidence.
+
+Use the strongest available review model when the runtime supports routing,
+and report the actual model truthfully. The reviewer reports only verified
+material findings and writes
+`.claude/tasks/<task>/final-review-<pass>.md` with `STATUS: APPROVED` or
+`STATUS: CHANGES_REQUESTED`.
+
+When changes are requested:
+
+1. return the findings to the Developer role;
+2. implement the technical resolution without asking the business user to
+   choose the mechanism;
+3. rerun the affected focused review and deterministic verification;
+4. start another **new clean reviewer** against the updated cumulative state.
+
+Repeat until a clean reviewer approves or work is genuinely blocked by missing
+credentials/access, safety, an irreversible action, or missing business
+behavior. Never let the reviewer that found or observed a defect approve its
+own remediation.
+
 ## Loop termination
 
-The workflow ends when the review is approved and the verification report is
-`STATUS: PASSED`, or when the user stops the workflow.
+The workflow ends when the focused review is approved, verification is
+`STATUS: PASSED`, and any required Step 5 reviewer has approved the cumulative
+state, or when the user stops the workflow.
 
 ## Final summary
 
-At the end, read `plan.md`, `dev-summary.md`, `review.md`, and
-`verification.md`, then provide:
+At the end, read `plan.md`, `dev-summary.md`, `review.md`, `verification.md`,
+and every `final-review-*.md` that exists, then provide:
 - Technical Resolution
 - Business Resolution
 - Suggested commit message (do not commit unless the user explicitly asks)

@@ -79,6 +79,12 @@ if [ -f README.md ]; then
   }
 fi
 
+if [ "${SCAFFOLD_SOURCE}" -eq 0 ]; then
+  [ -x "${SCRIPT_DIR}/lib/check-architecture-overview.sh" ] \
+    || fail "Missing executable scripts/lib/check-architecture-overview.sh"
+  VERIFY_ROOT="${ROOT}" bash "${SCRIPT_DIR}/lib/check-architecture-overview.sh"
+fi
+
 # The shipped payload manifest is the exact active-project skill contract.
 # Detect both missing workflows and undeclared registry additions.
 if [ -f agent-payload.skills ]; then

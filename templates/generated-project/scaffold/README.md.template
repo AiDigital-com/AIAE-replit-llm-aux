@@ -4,6 +4,8 @@
 
 AI-assisted development workflow: see `AI-DEVELOPMENT-GUIDE.md`. GSD is an
 optional Claude Code workflow and is not initialized automatically by Replit.
+The implemented system design is documented in
+[`docs/architecture-overview.md`](docs/architecture-overview.md).
 
 ## Owner
 - Product owner: <name / Slack>
@@ -39,6 +41,15 @@ Describe the actual product flow here in business language:
 3. Backend at `http://localhost:8080/<context-path>/`, frontend at
    `http://localhost:5173/` (dev) or under the backend in built mode.
 4. `docker compose --profile local down -v` to clean up.
+
+### Ask the agent to show the current product
+
+Say **“I want to see what we have”** (or ask to run/preview the product). The
+installed `local-preview` workflow prepares safe local-only demo fixtures when
+the main flow needs data, starts the supported stack, verifies health and the
+visible route, and returns the exact URL plus a stop command. If Clerk or an
+external integration needs credentials, the agent names the required variable
+and safe `.env`/Replit Secrets location; never paste a secret into chat.
 
 ## Data sources
 
@@ -95,10 +106,8 @@ Integration tests run on `workflow_dispatch` with `run_integration_tests=true`.
 
 ## Architecture
 
-- Backend: Java 21 LTS + Spring Boot 3.x, multi-module Maven.
-- Java package root: `com.aidigital.<app-name-package>`.
-- Frontend: React + TypeScript + Vite, typed via `openapi-typescript`.
-- Auth: Clerk SSO only (required) — Clerk + Google; backend validates JWTs vs Clerk JWKS.
-- Persistence: PostgreSQL (Replit SQL Database on workspace, docker-compose locally).
-- Observability: JSON logs to stdout, Actuator (`health`, `prometheus`),
-  Logbook HTTP request/response logs with masking, Postgres `usage_events` table.
+[`docs/architecture-overview.md`](docs/architecture-overview.md) is the
+canonical description of the implemented product architecture, runtime flows,
+module boundaries, data ownership, caching, integrations, security, deployment,
+and operational constraints. Keep it synchronized with the code. Detailed
+engineering rules remain under `.claude/` and are not duplicated in the README.

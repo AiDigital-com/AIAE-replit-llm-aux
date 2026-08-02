@@ -5,11 +5,11 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 import sys
 from pathlib import Path
 
 from liquibase_dependency_guard import find_active_token_references
+from removal_transaction import apply_removal_transaction
 
 
 CACHE_USE = re.compile(
@@ -209,6 +209,22 @@ def prepare_changes(root: Path) -> tuple[dict[Path, str], tuple[Path, ...]]:
 
     changes: dict[Path, str] = {}
 
+    architecture = root / "docs/architecture-overview.md"
+    architecture_text = read(architecture)
+    architecture_text = replace_once(
+        architecture_text,
+        r"^- Cache status: enabled$",
+        "- Cache status: disabled",
+        "enabled architecture cache status",
+    )
+    architecture_text = replace_once(
+        architecture_text,
+        r"^\| `backend/cache-management` \|[^\n]*\n",
+        "",
+        "cache-management architecture module row",
+    )
+    changes[architecture] = architecture_text
+
     parent = backend / "pom.xml"
     parent_text = read(parent)
     parent_text = replace_once(
@@ -361,6 +377,24 @@ def prepare_changes(root: Path) -> tuple[dict[Path, str], tuple[Path, ...]]:
         if not path.exists():
             raise RuntimeError(f"required cache-owned path is missing: {path}")
 
+    residual: list[str] = []
+    for token in ("cache-management", "0003-cache-invalidation.xml"):
+        for candidate in backend.rglob("*"):
+            if "target" in candidate.parts or not candidate.is_file():
+                continue
+            if any(candidate == deleted or candidate.is_relative_to(deleted) for deleted in delete_paths):
+                continue
+            content = changes.get(candidate)
+            if content is None:
+                content = candidate.read_text(encoding="utf-8", errors="ignore")
+            if token in content:
+                residual.append(candidate.relative_to(root).as_posix())
+    if residual:
+        raise RuntimeError(
+            "planned no-cache tree still has active references:\n  "
+            + "\n  ".join(sorted(set(residual)))
+        )
+
     return changes, delete_paths
 
 
@@ -387,31 +421,10 @@ def main() -> int:
         print("remove-cache-management: DRY RUN — re-run with --apply")
         return 0
 
-    for path, content in changes.items():
-        path.write_text(content, encoding="utf-8")
-    for path in delete_paths:
-        if path.is_dir():
-            shutil.rmtree(path)
-        else:
-            path.unlink()
-            parent = path.parent
-            while parent != root and parent.is_dir() and not any(parent.iterdir()):
-                parent.rmdir()
-                parent = parent.parent
-
-    residual = []
-    for token in ("cache-management", "0003-cache-invalidation.xml"):
-        for candidate in (root / "backend").rglob("*"):
-            if "target" in candidate.parts:
-                continue
-            if candidate.is_file() and token in candidate.read_text(encoding="utf-8", errors="ignore"):
-                residual.append(candidate.relative_to(root).as_posix())
-    if residual:
-        print(
-            "remove-cache-management: FAILED — residual active references:\n  "
-            + "\n  ".join(sorted(set(residual))),
-            file=sys.stderr,
-        )
+    try:
+        apply_removal_transaction(root, changes, delete_paths)
+    except (OSError, RuntimeError) as error:
+        print(f"remove-cache-management: FAILED — {error}", file=sys.stderr)
         return 1
 
     print("remove-cache-management: removed L2 cache and cross-node invalidation together")

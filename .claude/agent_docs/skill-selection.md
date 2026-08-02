@@ -15,6 +15,7 @@ full `task-workflow` inside a GSD phase.
 | Read-only frontend/UI review | `frontend-style-review` |
 | Whole-repository compliance/handoff | `aiae-rule-compliance-audit` |
 | UI creation, parity, or visual polish | `ui-designer`, then `frontend-style-review` |
+| User asks to see, run, preview, or demo the product | `local-preview` |
 | Final evidence outside GSD | `verification-gate` |
 
 ## Installed project skills
@@ -29,6 +30,9 @@ full `task-workflow` inside a GSD phase.
   contract; use before migration handoff or periodic health checks.
 - `ui-designer`: implementation workflow with explicit `PARITY`, `IMPROVE`, and
   `NEW` modes.
+- `local-preview`: prepares safe local-only fixtures when needed, starts the
+  supported local stack, verifies it, and returns a business-friendly URL and
+  credential instructions.
 - `verification-gate`: fresh claim-to-evidence validation before completion.
 
 ## GSD usage

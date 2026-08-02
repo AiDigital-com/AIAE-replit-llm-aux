@@ -19,7 +19,11 @@ Common top-level areas:
 ## Start Here
 
 1. Read `.claude/agent_docs/index.md`.
-2. For backend work, read the relevant docs before changing code:
+2. When `docs/architecture-overview.md` exists, read it before cross-cutting
+   implementation, integration, data, caching, deployment, or handoff work.
+   Keep it synchronized with the implemented repository; it describes project
+   facts while `.claude/` contains reusable engineering rules.
+3. For backend work, read the relevant docs before changing code:
    - `project_structure.md`
    - `building_the_project.md`
    - `running_tests.md`
@@ -28,7 +32,7 @@ Common top-level areas:
    - `service_architecture.md`
    - `performance_engineering.md` for request flows, transactions, queries,
      external calls, logging, caching, pools, or payload work
-3. For frontend work, read the relevant docs before changing code:
+4. For frontend work, read the relevant docs before changing code:
    - `project_structure.md`
    - `building_the_project.md`
    - `running_tests.md`
@@ -37,14 +41,26 @@ Common top-level areas:
    - `frontend_testing.md`
    - `performance_engineering.md` for data fetching, request counts, payloads,
      rendering, or bundle work
-4. Respect `.claude/rules/*.md`.
-5. Read `.claude/agent_docs/skill-selection.md` before choosing between GSD,
+5. Respect `.claude/rules/*.md`.
+6. Read `.claude/agent_docs/skill-selection.md` before choosing between GSD,
    `task-workflow`, and a focused skill.
-6. Read `.claude/agent_docs/context7.md` before using external library or
+7. Read `.claude/agent_docs/context7.md` before using external library or
    framework documentation. Use the configured Context7 MCP for
    version-sensitive APIs; fall back to official vendor docs when unavailable.
-7. Before applying a path, package, port, module, navigation, or test command
+8. Before applying a path, package, port, module, navigation, or test command
    from these docs, verify it against the current repository.
+
+## Decision Ownership
+
+The user owns business goals, priorities, and acceptance—not technical design.
+Do not ask them to choose frameworks, architecture, persistence, API, caching,
+or test mechanisms. Resolve technical ambiguity with the strongest available
+reasoning role and record the rationale. Ask only for missing business behavior,
+credentials/access, or an irreversible product decision, phrased in business
+terms. Follow `.claude/agent_docs/agent-operating-model.md` for delegation and
+the fresh final-review loop. Keep user-visible work locally demonstrable; when
+the user asks to see it, invoke `local-preview` and supply safe local fixtures
+when the flow otherwise has no useful data.
 
 ## Enterprise Hard Constraints
 

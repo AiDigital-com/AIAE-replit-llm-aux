@@ -186,6 +186,14 @@ if [ -f "${SCAFFOLD}/README.md.template" ] && [ ! -f "${DEST}/README.md" ]; then
   sed "s/<APP-NAME>/${APP_NAME}/g" "${SCAFFOLD}/README.md.template" > "${DEST}/README.md"
 fi
 
+if [ -f "${SCAFFOLD}/docs/architecture-overview.md.template" ] \
+    && [ ! -f "${DEST}/docs/architecture-overview.md" ]; then
+  mkdir -p "${DEST}/docs"
+  sed "s/<APP-NAME>/${APP_NAME}/g" \
+    "${SCAFFOLD}/docs/architecture-overview.md.template" \
+    > "${DEST}/docs/architecture-overview.md"
+fi
+
 for script in "${RUNTIME_SCRIPTS[@]}"; do
   if [ -f "${SCAFFOLD}/scripts/${script}" ]; then
     cp "${SCAFFOLD}/scripts/${script}" "${DEST}/scripts/${script}"

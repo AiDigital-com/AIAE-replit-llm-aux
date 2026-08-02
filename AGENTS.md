@@ -12,6 +12,18 @@ This repository is a **Replit Custom Template control plane**, not a runnable ap
 6. **Project shape:** read `templates/generated-project/generation/project-shape-decision.md` before deciding frontend-only vs full-stack.
 7. **HTML-only inputs:** if logging, persistence, auth, or multi-user review is needed, migrate to the generated `frontend/` + Java `backend/` layout; do not keep a static-only app.
 
+## Decision ownership
+
+The user owns business goals, priorities, and acceptance—not technical design.
+Do not ask them to choose frameworks, architecture, persistence, API, caching,
+or test mechanisms. Resolve technical ambiguity with the strongest available
+reasoning role and record the rationale. Ask only for missing business behavior,
+credentials/access, or an irreversible product decision, phrased in business
+terms. Follow `.claude/agent_docs/agent-operating-model.md` for role routing and
+the fresh final-review loop. Keep user-visible work locally demonstrable; when
+the user asks to see it, invoke `local-preview` and supply safe local fixtures
+when the flow otherwise has no useful data.
+
 ## Dual runtime surfaces
 
 Replit Agent and Claude Code have different native skill discovery paths.

@@ -10,11 +10,19 @@ from the current checkout before applying examples.
 - `CLAUDE.md` is the repository entrypoint and should stay short.
 - `.claude/agent_docs/` contains detailed repository context and engineering conventions.
 - `.claude/rules/` contains concise always-on or path-scoped rules that Claude should load automatically. See `.claude/agent_docs/rule-loading-conventions.md` for the naming/loading convention (always-on hard rules vs path-scoped topic rules).
-- `.claude/skills/` contains reusable workflows and review gates: `task-workflow` (multi-role execution), `backend-rule-review`, `frontend-style-review`, `aiae-rule-compliance-audit` (whole-repo audit against the installed AIAE contract), and `ui-designer` (visual-polish pass within the Elevate design system).
+- `.claude/skills/` contains reusable workflows and review gates: `task-workflow` (multi-role execution), `backend-rule-review`, `frontend-style-review`, `aiae-rule-compliance-audit` (whole-repo audit against the installed AIAE contract), `ui-designer` (visual-polish pass within the Elevate design system), and `local-preview` (fixtures plus a verified running demo).
 - `.claude/tasks/` stores plan, summary, review, and test artifacts for individual tasks.
 
 ## What to Read
 
+- Read `agent-operating-model.md` before delegating work, selecting model roles,
+  asking the user for input, starting a local preview, or running final review.
+- When `docs/architecture-overview.md` exists at the repository root, read it
+  before cross-cutting product work. In a materialized project it is the
+  canonical record of the implemented system context, runtime flows, module
+  boundaries, data ownership, caching, integrations, deployment, and
+  operational constraints. Update it when those facts change; do not copy its
+  product-specific content into this reusable rule tree.
 - Read `project_structure.md` when locating modules, packages, generated code, frontend features, shared frontend utilities, or deciding where new classes/components belong.
 - Read `project_shape_decision.md` before deciding frontend-only vs full-stack work.
 - Read `building_the_project.md` before compiling, packaging, running Vite, or choosing Maven/npm commands.

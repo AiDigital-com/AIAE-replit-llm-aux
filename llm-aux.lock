@@ -22,5 +22,5 @@
 # entire rollback procedure — no other state is involved.
 
 repository=https://github.com/AiDigital-com/AIAE-llm-aux.git
-revision=d8f00e9689669785367c31e97fc5ed2229e7eb0d
+revision=690a9748657adf81d01702dafa2c7ecc8afcf5c5
 version=0.2.0

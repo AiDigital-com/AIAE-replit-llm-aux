@@ -75,6 +75,9 @@ assert_file "${T1}/.mcp.json"
 assert_contains "${T1}/.mcp.json" "https://mcp.context7.com/mcp/oauth"
 assert_not_contains "${T1}/.mcp.json" "CONTEXT7_API_KEY"
 assert_file "${T1}/AI-DEVELOPMENT-GUIDE.md"
+assert_file "${T1}/docs/architecture-overview.md"
+assert_contains "${T1}/docs/architecture-overview.md" "# replitmvp Architecture Overview"
+assert_contains "${T1}/docs/architecture-overview.md" "ARCHITECTURE-TODO:"
 assert_file "${T1}/.claude/agent_docs/index.md"
 assert_file "${T1}/.claude/rules/00-backend-hard-rules.md"
 assert_file "${T1}/.claude/rules/40-frontend-rules.md"
@@ -87,6 +90,7 @@ assert_file "${T1}/.claude/agent_docs/structure/near-production-project-structur
 assert_file "${T1}/.claude/agent_docs/auth/google-sso-clerk-blueprint.md"
 assert_file "${T1}/.claude/agent_docs/performance/performance-engineering-rules.md"
 assert_file "${T1}/.claude/tasks/README.md"
+assert_file "${T1}/scripts/lib/check-architecture-overview.sh"
 
 trap - EXIT
 rm -rf "${T1}"
@@ -106,18 +110,25 @@ assert_not_contains "${T2}/replit.md" "custom_instruction/"
 assert_file "${T2}/CLAUDE.md"
 assert_file "${T2}/.mcp.json"
 assert_file "${T2}/AI-DEVELOPMENT-GUIDE.md"
+assert_file "${T2}/docs/architecture-overview.md"
 assert_file "${T2}/agent-payload.skills"
 # Both registries are discovered by their respective runtimes; task state is
 # shared under .claude/tasks.
 assert_file "${T2}/.agents/skills/verification-gate/SKILL.md"
 assert_file "${T2}/.agents/skills/verification-gate/agents/openai.yaml"
 assert_file "${T2}/.agents/skills/task-workflow/SKILL.md"
+assert_contains \
+  "${T2}/.agents/skills/task-workflow/SKILL.md" \
+  "## Step 5 — Independent final review convergence"
 assert_file "${T2}/.claude/agent_docs/rule-loading-conventions.md"
 assert_file "${T2}/.claude/agent_docs/distributed_cache.md"
 assert_file "${T2}/.claude/agent_docs/context7.md"
 assert_file "${T2}/.claude/skills/verification-gate/SKILL.md"
 assert_file "${T2}/.claude/skills/verification-gate/agents/openai.yaml"
 assert_file "${T2}/.claude/skills/task-workflow/SKILL.md"
+assert_contains \
+  "${T2}/.claude/skills/task-workflow/SKILL.md" \
+  "## Step 5 — Independent final review convergence"
 assert_file "${T2}/.claude/skills/production-code-review/SKILL.md"
 assert_file "${T2}/.claude/skills/fullstack-performance-audit/SKILL.md"
 assert_absent "${T2}/.claude/skills/rule-compliance-audit"
@@ -132,6 +143,15 @@ assert_contains \
   "${T2}/.agents/skills/aiae-rule-compliance-audit/SKILL.md" \
   '2. `AGENTS.md` when the active Replit surface is present;'
 assert_file "${T2}/.claude/skills/ui-designer/SKILL.md"
+assert_file "${T2}/.claude/skills/local-preview/SKILL.md"
+assert_file "${T2}/.agents/skills/local-preview/SKILL.md"
+assert_file "${T2}/.claude/agent_docs/agent-operating-model.md"
+assert_contains \
+  "${T2}/.claude/skills/engineering-handoff/SKILL.md" \
+  "## Independent final review convergence"
+assert_contains \
+  "${T2}/.agents/skills/engineering-handoff/SKILL.md" \
+  "## Independent final review convergence"
 # finalize-coverage runs inside the project, so it ships; project-init does not.
 assert_file "${T2}/.claude/skills/finalize-coverage/SKILL.md"
 assert_absent "${T2}/.claude/skills/project-init"
@@ -147,7 +167,7 @@ assert_file "${T2}/scripts/lib/check-installed-documentation-links.py"
 assert_file "${T2}/scripts/lib/check-maven-dependency-analysis.py"
 assert_file "${T2}/scripts/lib/rewrite-installed-documentation-paths.py"
 # Portable Replit workflows ship in both registries. project-init is template-only.
-for runtime_skill in backend-java-feature frontend-react-feature openapi-contract-first mvp-safety-review engineering-handoff finalize-coverage; do
+for runtime_skill in backend-java-feature frontend-react-feature openapi-contract-first mvp-safety-review engineering-handoff finalize-coverage local-preview; do
   assert_file "${T2}/.claude/skills/${runtime_skill}/SKILL.md"
   assert_file "${T2}/.agents/skills/${runtime_skill}/SKILL.md"
 done
@@ -202,6 +222,7 @@ assert_file "${T2}/scripts/remove-cache-management.sh"
 assert_file "${T2}/scripts/remove-usage-logging.sh"
 assert_file "${T2}/scripts/lib/remove-cache-management.py"
 assert_file "${T2}/scripts/lib/remove-usage-logging.py"
+assert_file "${T2}/scripts/lib/removal_transaction.py"
 assert_file "${T2}/backend/migrations/src/main/resources/db/changelog/changes/0003-cache-invalidation.xml"
 assert_file "${T2}/backend/service/src/main/java/com/aidigital/replitmvp/service/cache/JpaCacheInvalidationEventService.java"
 assert_contains "${T2}/backend/service/pom.xml" "<artifactId>cache-management</artifactId>"
@@ -324,6 +345,7 @@ assert_file "${T7}/replit.md"
 assert_file "${T7}/CLAUDE.md"
 assert_file "${T7}/.mcp.json"
 assert_file "${T7}/.claude/skills/verification-gate/SKILL.md"
+assert_file "${T7}/docs/architecture-overview.md"
 
 # A materialized project starts in the relaxed MVP coverage phase.
 assert_file "${T7}/.template-phase"
@@ -387,6 +409,34 @@ path.write_text(
 )
 PY
 
+# The standalone supported removal command owns the same architecture update as
+# engineering handoff; direct use must not leave a false canonical overview.
+T7_ROLLBACK="$(mktemp_dir)"
+cp -R "${T7}/." "${T7_ROLLBACK}/"
+if AIAE_REMOVE_FAIL_BEFORE_ARCHITECTURE=1 \
+    bash "${T7_ROLLBACK}/scripts/remove-usage-logging.sh" --apply >/dev/null 2>&1; then
+  fail "usage removal accepted an injected apply-time failure"
+fi
+assert_file "${T7_ROLLBACK}/backend/event-logging-to-db-feature/pom.xml"
+assert_contains "${T7_ROLLBACK}/backend/pom.xml" "<module>event-logging-to-db-feature</module>"
+assert_contains "${T7_ROLLBACK}/docs/architecture-overview.md" "MVP usage telemetry: enabled during MVP"
+if find "${T7_ROLLBACK}" -maxdepth 1 -name '.aiae-removal-transaction-*' -print -quit \
+    | grep -q .; then
+  fail "usage removal rollback left transaction staging behind"
+fi
+pass "usage removal rolls back an apply-time failure"
+rm -rf "${T7_ROLLBACK}"
+
+T7_DIRECT="$(mktemp_dir)"
+cp -R "${T7}/." "${T7_DIRECT}/"
+bash "${T7_DIRECT}/scripts/remove-usage-logging.sh" --apply >/dev/null
+assert_contains "${T7_DIRECT}/docs/architecture-overview.md" "MVP usage telemetry: removed"
+assert_not_contains \
+  "${T7_DIRECT}/docs/architecture-overview.md" \
+  '| `backend/event-logging-to-db-feature` |'
+VERIFY_ROOT="${T7_DIRECT}" bash "${T7_DIRECT}/scripts/lib/check-architecture-overview.sh" >/dev/null
+rm -rf "${T7_DIRECT}"
+
 # The active dual-agent runtime must survive a normal git add/commit/clone.
 git -C "${T7}" init -q
 git -C "${T7}" config user.email "template-test@aidigital.test"
@@ -419,6 +469,40 @@ echo engineering > "${T7}/.template-phase"
 git -C "${T7}" add .template-phase
 git -C "${T7}" commit -qm "finalize coverage phase"
 
+# Engineering phase treats an unverified scaffold overview as a blocker. The
+# document is product evidence, not a decorative handoff checkbox.
+if bash "${T7}/scripts/prepare-engineering-handoff.sh" --target "${T7}" >/dev/null 2>&1; then
+  echo "FAIL: handoff accepted unresolved ARCHITECTURE-TODO markers"
+  exit 1
+fi
+pass "handoff blocks unresolved architecture overview"
+sed \
+  -e '/ARCHITECTURE-TODO:/d' \
+  -e '/<!--/d' \
+  -e '/External systems/d' \
+  -e 's/Product user/Engineering user/' \
+  -e 's/Product capability: ARCHITECTURE-TODO/Product capability: Review and manage product records/' \
+  -e 's/Primary users: ARCHITECTURE-TODO/Primary users: Engineering reviewers/' \
+  -e 's/Primary production flow: ARCHITECTURE-TODO/Primary production flow: Authenticated record review/' \
+  -e 's#ARCHITECTURE-TODO/product-source-1#frontend/src/App.tsx#' \
+  -e 's#ARCHITECTURE-TODO/product-source-2#backend/application/src/main/resources/api/v1/specs/openapi.yaml#' \
+  -e 's#ARCHITECTURE-TODO/runtime-deployment#.replit#' \
+  -e 's#ARCHITECTURE-TODO/module-boundaries#backend/pom.xml#' \
+  -e 's#ARCHITECTURE-TODO/primary-flow#frontend/src/App.tsx#' \
+  -e 's#ARCHITECTURE-TODO/api-security#backend/application/src/main/resources/api/v1/specs/openapi.yaml#' \
+  -e 's#ARCHITECTURE-TODO/data-migrations#backend/migrations/src/main/resources/db/changelog/db.changelog-master.xml#' \
+  -e 's#ARCHITECTURE-TODO/caching#backend/application/src/main/resources/application.yml#' \
+  -e 's#ARCHITECTURE-TODO/integrations#.env.example#' \
+  -e 's#ARCHITECTURE-TODO/observability#backend/application/src/main/resources/logback-spring.xml#' \
+  -e 's/Lifecycle phase: MVP/Lifecycle phase: Engineering/' \
+  -e 's/Last verified against: initial scaffold/Last verified against: test revision/' \
+  "${T7}/docs/architecture-overview.md" \
+  > "${T7}/docs/architecture-overview.md.final"
+mv "${T7}/docs/architecture-overview.md.final" "${T7}/docs/architecture-overview.md"
+VERIFY_ROOT="${T7}" bash "${T7}/scripts/lib/check-architecture-overview.sh" >/dev/null
+git -C "${T7}" add docs/architecture-overview.md
+git -C "${T7}" commit -qm "finalize architecture overview"
+
 # A real project replaces the copyable feature template before handoff. Keep a
 # minimal product entry point so this focused lifecycle fixture proves the
 # handoff removes the now-unreferenced directory without guessing at routes.
@@ -448,6 +532,8 @@ pass "engineering structure-lint accepts the post-handoff frontend tree"
 bash "${T7}/scripts/prepare-engineering-handoff.sh" --target "${T7}" >/dev/null 2>&1
 assert_file "${T7}/AGENTS.md"
 assert_file "${T7}/replit.md"
+assert_contains "${T7}/docs/architecture-overview.md" "MVP usage telemetry: enabled during MVP"
+assert_contains "${T7}/docs/architecture-overview.md" '| `backend/event-logging-to-db-feature` |'
 
 # Replace the expensive verification command in this focused lifecycle fixture
 # with a committed probe. Production code invokes this fixed path directly; the
@@ -501,6 +587,10 @@ assert_file "${T7}/.mcp.json"
 assert_file "${T7}/.claude/skills/verification-gate/SKILL.md"
 assert_file "${T7}/.claude/skills/task-workflow/SKILL.md"
 assert_file "${T7}/.claude/rules/00-backend-hard-rules.md"
+assert_file "${T7}/docs/architecture-overview.md"
+assert_not_contains "${T7}/docs/architecture-overview.md" "ARCHITECTURE-TODO:"
+assert_contains "${T7}/docs/architecture-overview.md" "MVP usage telemetry: removed"
+assert_not_contains "${T7}/docs/architecture-overview.md" '| `backend/event-logging-to-db-feature` |'
 assert_absent "${T7}/backend/event-logging-to-db-feature"
 assert_absent "${T7}/backend/migrations/src/main/resources/db/changelog/changes/0001-usage-events.xml"
 assert_not_contains "${T7}/backend/pom.xml" "event-logging-to-db-feature"
@@ -699,8 +789,26 @@ path.write_text(
     encoding="utf-8",
 )
 PY
+T8_ROLLBACK="$(mktemp_dir)"
+cp -R "${T8}/." "${T8_ROLLBACK}/"
+if AIAE_REMOVE_FAIL_BEFORE_ARCHITECTURE=1 \
+    bash "${T8_ROLLBACK}/scripts/remove-cache-management.sh" --apply >/dev/null 2>&1; then
+  fail "cache removal accepted an injected apply-time failure"
+fi
+assert_file "${T8_ROLLBACK}/backend/cache-management/pom.xml"
+assert_contains "${T8_ROLLBACK}/backend/pom.xml" "<module>cache-management</module>"
+assert_contains "${T8_ROLLBACK}/docs/architecture-overview.md" "Cache status: enabled"
+if find "${T8_ROLLBACK}" -maxdepth 1 -name '.aiae-removal-transaction-*' -print -quit \
+    | grep -q .; then
+  fail "cache removal rollback left transaction staging behind"
+fi
+pass "cache removal rolls back an apply-time failure"
+rm -rf "${T8_ROLLBACK}"
+
 bash "${T8}/scripts/remove-cache-management.sh" --apply >/dev/null
 assert_absent "${T8}/backend/cache-management"
+assert_contains "${T8}/docs/architecture-overview.md" "Cache status: disabled"
+assert_not_contains "${T8}/docs/architecture-overview.md" '| `backend/cache-management` |'
 assert_absent "${T8}/backend/application/src/main/resources/ehcache.xml"
 assert_absent "${T8}/backend/migrations/src/main/resources/db/changelog/changes/0003-cache-invalidation.xml"
 assert_not_contains "${T8}/backend/pom.xml" "<module>cache-management</module>"

@@ -34,13 +34,23 @@ test -f "${OUT}/artifact/.mcp.json"
 grep -q 'https://mcp.context7.com/mcp/oauth' "${OUT}/artifact/.mcp.json"
 ! grep -Eq 'CONTEXT7_API_KEY|ctx7sk-' "${OUT}/artifact/.mcp.json"
 test -f "${OUT}/artifact/AI-DEVELOPMENT-GUIDE.md"
+test -f "${OUT}/artifact/docs/architecture-overview.md"
+grep -q '^## Product and system context' "${OUT}/artifact/docs/architecture-overview.md"
+grep -q 'ARCHITECTURE-TODO:' "${OUT}/artifact/docs/architecture-overview.md"
 test -f "${OUT}/artifact/agent-payload.skills"
+test -f "${OUT}/artifact/.claude/agent_docs/agent-operating-model.md"
+grep -q '^## Independent final review convergence$' \
+  "${OUT}/artifact/.claude/skills/engineering-handoff/SKILL.md"
+grep -q '^## Independent final review convergence$' \
+  "${OUT}/artifact/.agents/skills/engineering-handoff/SKILL.md"
 test -f "${OUT}/artifact/.claude/agent_docs/index.md"
 test -f "${OUT}/artifact/.claude/agent_docs/project_shape_decision.md"
 test -f "${OUT}/artifact/.claude/agent_docs/context7.md"
 test -f "${OUT}/artifact/.claude/agent_docs/html_only_project_migration.md"
 test -f "${OUT}/artifact/.claude/rules/40-frontend-rules.md"
 test -f "${OUT}/artifact/.claude/skills/task-workflow/SKILL.md"
+grep -Fq '## Step 5 — Independent final review convergence' \
+  "${OUT}/artifact/.claude/skills/task-workflow/SKILL.md"
 test -f "${OUT}/artifact/.claude/skills/verification-gate/SKILL.md"
 test -f "${OUT}/artifact/.claude/skills/verification-gate/agents/openai.yaml"
 test -f "${OUT}/artifact/.claude/agent_docs/skill-selection.md"
@@ -48,8 +58,11 @@ test -f "${OUT}/artifact/.claude/agent_docs/skill-selection.md"
 test -f "${OUT}/artifact/AGENTS.md"
 test -f "${OUT}/artifact/replit.md"
 test -f "${OUT}/artifact/scripts/prepare-engineering-handoff.sh"
+test -f "${OUT}/artifact/scripts/lib/check-architecture-overview.sh"
 
 test -f "${OUT}/artifact/.agents/skills/task-workflow/SKILL.md"
+grep -Fq '## Step 5 — Independent final review convergence' \
+  "${OUT}/artifact/.agents/skills/task-workflow/SKILL.md"
 test -f "${OUT}/artifact/.agents/skills/verification-gate/SKILL.md"
 test -f "${OUT}/artifact/.agents/skills/verification-gate/agents/openai.yaml"
 
@@ -74,7 +87,7 @@ if grep -rqn "templates/generated-project" "${OUT}/artifact/.claude/skills" "${O
 fi
 
 # Replit-specific portable workflows must ship in both registries.
-for runtime_skill in backend-java-feature frontend-react-feature openapi-contract-first mvp-safety-review engineering-handoff finalize-coverage; do
+for runtime_skill in backend-java-feature frontend-react-feature openapi-contract-first mvp-safety-review engineering-handoff finalize-coverage local-preview; do
   test -f "${OUT}/artifact/.claude/skills/${runtime_skill}/SKILL.md"
   test -f "${OUT}/artifact/.agents/skills/${runtime_skill}/SKILL.md"
 done

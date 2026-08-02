@@ -118,6 +118,7 @@ REQUIRED_VERIFICATION_FILES=(
   scripts/lib/liquibase_dependency_guard.py
   scripts/lib/coverage-phase.sh
   scripts/lib/check-coverage-integrity.sh
+  scripts/lib/check-architecture-overview.sh
 )
 for required in "${REQUIRED_VERIFICATION_FILES[@]}"; do
   [ -f "$required" ] || {
@@ -151,12 +152,23 @@ EOF
   exit 1
 fi
 VERIFY_ROOT="$TARGET" bash scripts/lib/check-coverage-integrity.sh
+VERIFY_ROOT="$TARGET" bash scripts/lib/check-architecture-overview.sh
+
+validate_usage_telemetry_architecture() {
+  local doc="docs/architecture-overview.md"
+
+  [ "$(grep -Fxc -- '- MVP usage telemetry: enabled during MVP' "${doc}")" -eq 1 ] \
+    || { echo "prepare-engineering-handoff: expected one active MVP telemetry status in ${doc}" >&2; return 1; }
+  [ "$(grep -Fc '| `backend/event-logging-to-db-feature` |' "${doc}")" -eq 1 ] \
+    || { echo "prepare-engineering-handoff: expected the managed MVP telemetry module row in ${doc}" >&2; return 1; }
+}
 
 # Usage logging is part of the MVP testing/feedback phase, not the engineering
 # handoff baseline. Validate the transformation during dry-run. On apply,
 # perform it before local verification so the exact handed-off application —
 # not the pre-cleanup variant — is what passes the strict build.
 if [ -d backend/event-logging-to-db-feature ]; then
+  validate_usage_telemetry_architecture
   if [ "$APPLY" -eq 1 ]; then
     echo "==> Removing MVP usage logging before engineering verification"
     bash scripts/remove-usage-logging.sh --apply

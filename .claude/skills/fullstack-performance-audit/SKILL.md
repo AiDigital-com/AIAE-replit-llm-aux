@@ -6,7 +6,7 @@ description: Repository-wide performance audit for backend, frontend, database, 
 <!--
 Generated file. Do not edit directly.
 Source: AIAE-llm-aux/skills/fullstack-performance-audit/SKILL.md
-Revision: d8f00e9689669785367c31e97fc5ed2229e7eb0d
+Revision: 690a9748657adf81d01702dafa2c7ecc8afcf5c5
 Target: claude
 -->
 
