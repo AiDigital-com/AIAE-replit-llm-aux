@@ -26,6 +26,7 @@ suffix is just a readable label for the always-on file.
 | `10-39` | Backend and cross-layer topic rules | backend/frontend/deployment paths as declared |
 | `40-59` | Frontend topic rules | `frontend/**` paths |
 | `60-69` | External documentation/tooling policy | always on |
+| `70-79` | Delivery workflow and version control | product source and docs paths |
 
 Current files:
 
@@ -39,6 +40,8 @@ Current files:
 - `40-frontend-rules.md` — frontend architecture, API, auth, styling
 - `50-frontend-tests.md` — frontend test style
 - `60-documentation-sources.md` — Context7/official-doc fallback and secret handling
+- `70-version-control.md` — user-approved checkpoint commit offers during
+  migration, from-scratch, and multi-phase work
 
 ## Conventions when adding a rule file
 
