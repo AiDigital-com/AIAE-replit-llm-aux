@@ -96,6 +96,11 @@ canonical source; never restate it elsewhere.
 
 Full rules: `templates/generated-project/generation/token-efficient-generation-rules.md`.
 
+The user approves every commit; never commit or push on your own. Offer one at
+each step above and each checkpoint between them — not only at phase boundaries;
+in migrations per migrated slice — and before destructive/regenerating scripts.
+Full policy: `.claude/agent_docs/version-control-checkpoints.md`.
+
 ## Priorities
 
 1. Produce a demo that runs and publishes on Replit out of the box.

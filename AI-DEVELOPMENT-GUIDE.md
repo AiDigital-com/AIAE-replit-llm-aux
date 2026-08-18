@@ -72,3 +72,9 @@ Within GSD, use specialized skills as focused gates when their domain applies.
 GSD remains responsible for lifecycle/state; the skill remains responsible for
 domain depth. Outside GSD, always finish implementation work with
 `verification-gate`.
+
+In migration, from-scratch, or multi-phase work, offer the user a commit at every
+completed checkpoint inside a phase or workflow step, not only when the phase
+ends — a context limit inside one long phase is the usual way work is lost. The
+user still approves every commit and every push. See
+`.claude/agent_docs/version-control-checkpoints.md`.

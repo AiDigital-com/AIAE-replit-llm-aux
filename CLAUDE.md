@@ -66,6 +66,10 @@ when the flow otherwise has no useful data.
 
 - Keep the rule set self-contained when it is installed into a project; do not
   depend on another local checkout or a machine-specific absolute path.
+- Version control stays user-approved. In from-scratch, migration, or
+  multi-phase work, offer a commit at every completed checkpoint — not only at
+  phase boundaries — and before destructive or context-heavy steps. See
+  `.claude/agent_docs/version-control-checkpoints.md`.
 - Read `.claude/agent_docs/project_shape_decision.md` before deciding
   frontend-only vs full-stack work.
 - Do not hand-edit generated backend OpenAPI sources or generated frontend OpenAPI types.

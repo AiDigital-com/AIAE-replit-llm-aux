@@ -42,6 +42,10 @@ from the current checkout before applying examples.
 - Read `frontend_style.md` before changing CSS, visual layout, component classes, or UI structure.
 - Read `frontend_testing.md` before adding or changing frontend unit/component/API tests.
 - Read `skill-selection.md` before choosing GSD, `task-workflow`, or a focused review/design/verification skill.
+- Read `version-control-checkpoints.md` before a migration, a from-scratch
+  service, or any multi-phase work: offer the user a commit at every completed
+  checkpoint, not only at phase boundaries, so in-progress work survives context
+  limits and rollbacks. The user approves every commit and push.
 
 ## Embedded Enterprise Rules
 
