@@ -10,6 +10,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Deployment-only PRD_* overrides. Sourced BEFORE replit-env.sh so the
+# normalization there derives from the production values. The backend reads
+# CLERK_PUBLISHABLE_KEY (issuer/JWKS derivation) and CLERK_SECRET_KEY (Clerk
+# Backend API) from the environment at startup.
+if [ -f scripts/lib/deploy-env.sh ]; then
+  . scripts/lib/deploy-env.sh
+fi
+
 if [ -f scripts/replit-env.sh ]; then
   . scripts/replit-env.sh
 fi

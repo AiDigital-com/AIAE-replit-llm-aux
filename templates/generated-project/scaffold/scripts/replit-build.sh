@@ -15,6 +15,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."   # works from root/scripts and scaffold/scripts
 
+# Deployment-only PRD_* overrides. Sourced BEFORE replit-env.sh so the
+# normalization there derives VITE_* from the production values. The SPA bakes
+# CLERK_PUBLISHABLE_KEY into the bundle during this build, so a runtime-only
+# override would be too late.
+if [ -f scripts/lib/deploy-env.sh ]; then
+  . scripts/lib/deploy-env.sh
+fi
+
 if [ -f scripts/replit-env.sh ]; then
   . scripts/replit-env.sh
 fi

@@ -1,0 +1,4 @@
+interface:
+  display_name: "AIAE Application Deployment"
+  short_description: "Onboard applications onto the AIAE AWS platform"
+  default_prompt: "Use $aiae-application-deployment to analyze this repository and onboard the application onto AIAE DEV, stopping before any unapproved live or production action."
