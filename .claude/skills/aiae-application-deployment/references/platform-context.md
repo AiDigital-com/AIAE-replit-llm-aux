@@ -199,6 +199,13 @@ Current Operational Hub differences are examples, not universal defaults:
   PROD RDS is private, Multi-AZ, backed up, and deletion-protected.
 - Application logs and managed Prometheus/Grafana are PROD-only in the current
   baseline.
+- The current managed-metrics baseline includes only application/API, JVM,
+  HikariCP, cache, external-query, and PostgreSQL metrics. Kubernetes/node,
+  edge, deployment-marker, and CloudWatch Logs dashboards are not provisioned
+  by default.
+- Grafana dashboard maintenance uses the UI under an existing Identity Center
+  administrator. Never create a service account, API user, or API token solely
+  to maintain dashboards.
 - DNS is managed externally in GoDaddy. Terraform may request ACM certificates,
   but the user or domain administrator must create validation and traffic CNAMEs.
 

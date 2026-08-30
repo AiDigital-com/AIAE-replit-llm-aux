@@ -6,7 +6,7 @@ description: Onboard, deploy, verify, or recover an AIAE application on the shar
 <!--
 Generated file. Do not edit directly.
 Source: AIAE-llm-aux/skills/aiae-application-deployment/SKILL.md
-Revision: 3de738d452e39657fbf1e0653cbcf6b4f70bab6f
+Revision: 7b84eb81c4b9ac2afc9ae633dc96f8e4c18522ba
 Target: agents
 -->
 
@@ -133,6 +133,19 @@ Operational Hub-specific resources. Never copy the root and apply it under a new
 state key for another application. Extend it with application-scoped resources
 without renaming existing addresses, or first perform an explicitly reviewed
 state/module migration.
+
+### Control observability identities and cost
+
+- Maintain Grafana dashboards through the UI as an existing Identity Center
+  administrator. Never create a Grafana service account, API user, or API token
+  solely to import, update, or delete dashboards.
+- If no existing administrator can make the change, stop and request an
+  administrator assignment. A temporary API identity is not an acceptable
+  workaround because Amazon Managed Grafana may bill it as an active editor.
+- Keep the default managed-metrics scope to application/API, JVM, HikariCP,
+  cache, external-query, and PostgreSQL metrics. Add Kubernetes/node, edge,
+  deployment-marker, log-query, or paid CloudFront metrics only for a verified
+  operational requirement after stating the recurring cost.
 
 ### Protect repositories and Git history
 

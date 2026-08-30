@@ -69,7 +69,9 @@ manifest_matches_selection() {
 [ -f "$SELECTION_FILE" ] || fail "missing .llm-aux-managed-skills"
 LOCK_REPO="$(awk -F= '$1=="repository" {print substr($0,index($0,"=")+1)}' "$LOCK_FILE")"
 LOCK_REV="$(awk -F= '$1=="revision" {print $2}' "$LOCK_FILE")"
-[ -n "$LOCK_REPO" ] && [ -n "$LOCK_REV" ] || fail "lock needs repository and revision"
+LOCK_VERSION="$(awk -F= '$1=="version" {print $2}' "$LOCK_FILE")"
+[ -n "$LOCK_REPO" ] && [ -n "$LOCK_REV" ] && [ -n "$LOCK_VERSION" ] \
+  || fail "lock needs repository, revision, and version"
 case "$LOCK_REPO" in *://*|git@*) ;; *) fail "lock repository must be a portable URL";; esac
 SELECTION=()
 while IFS= read -r skill; do case "$skill" in ''|\#*) ;; *) SELECTION+=("$skill");; esac; done < "$SELECTION_FILE"
@@ -180,10 +182,19 @@ fi
 
 if [ "$MODE" = "--update-lock" ]; then
   NEW="$(git -C "$CACHE" rev-parse HEAD)"
+  NEW_VERSION="$(
+    git -C "$CACHE" show "${NEW}:CHANGELOG.md" \
+      | awk '/^## [0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)/ {print $2; exit}'
+  )"
+  printf '%s' "$NEW_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
+    || fail "source revision $NEW has no released semantic version in CHANGELOG.md"
   temporary_lock="$(mktemp "${LOCK_FILE}.XXXXXX")"
-  sed "s/^revision=.*/revision=$NEW/" "$LOCK_FILE" > "$temporary_lock"
+  sed \
+    -e "s/^revision=.*/revision=$NEW/" \
+    -e "s/^version=.*/version=$NEW_VERSION/" \
+    "$LOCK_FILE" > "$temporary_lock"
   mv "$temporary_lock" "$LOCK_FILE"
-  echo "sync-llm-aux: repinned to $NEW"; exit 0
+  echo "sync-llm-aux: repinned to $NEW (version $NEW_VERSION)"; exit 0
 fi
 
 git -C "$CACHE" cat-file -e "${LOCK_REV}^{commit}" 2>/dev/null \

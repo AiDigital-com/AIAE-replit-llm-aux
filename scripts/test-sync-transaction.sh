@@ -52,6 +52,23 @@ if [ -d "$COMMON" ]; then
     echo "test-sync-transaction: FAIL — relative source was not canonicalized" >&2
     exit 1
   }
+
+  LLM_AUX_SOURCE="$COMMON_ABSOLUTE" \
+    LLM_AUX_CACHE="$WORK/update-lock-cache" \
+    bash "$WORK/repo/scripts/sync-llm-aux.sh" --update-lock >/dev/null
+  expected_revision="$(git -C "$COMMON_ABSOLUTE" rev-parse HEAD)"
+  expected_version="$(
+    git -C "$COMMON_ABSOLUTE" show "${expected_revision}:CHANGELOG.md" \
+      | awk '/^## [0-9]+\.[0-9]+\.[0-9]+([[:space:]]|$)/ {print $2; exit}'
+  )"
+  grep -qx "revision=${expected_revision}" "$WORK/repo/llm-aux.lock" || {
+    echo "test-sync-transaction: FAIL — update-lock did not update revision" >&2
+    exit 1
+  }
+  grep -qx "version=${expected_version}" "$WORK/repo/llm-aux.lock" || {
+    echo "test-sync-transaction: FAIL — update-lock did not update version" >&2
+    exit 1
+  }
 fi
 
 # An existing non-bare directory at the derived cache path is never disposable,

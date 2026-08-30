@@ -331,8 +331,12 @@ The agreed baseline is:
 - managed Prometheus and Grafana in PROD only;
 - HTTP latency histograms/SLO buckets enabled when percentile panels require
   them;
-- JVM, HikariCP, Kubernetes, PostgreSQL, application cache, and external query
-  metrics selected intentionally;
+- application/API, JVM, HikariCP, PostgreSQL, application cache, and external
+  query metrics selected intentionally;
+- no Kubernetes, node, ALB/CloudFront, deployment-marker, or CloudWatch Logs
+  dashboards by default;
+- no paid CloudFront additional metrics subscription unless a verified
+  incident-response requirement justifies its recurring cost;
 - low-cardinality labels only.
 
 Per-pod panels are still possible when metrics are scraped centrally; include
@@ -343,6 +347,19 @@ account users may be visible in one console yet fail workspace association when
 they are not provisioned in the organization instance. This requires the
 organization administrator; do not attempt to work around it with unrelated
 local accounts.
+
+Do not create a Grafana service account, API user, or API token to import,
+update, or delete dashboards. Amazon Managed Grafana can bill every such
+identity as an active editor for the billing month even when it is immediately
+deleted. Use the Grafana UI as an already assigned administrator. If no existing
+administrator can perform the change, stop and ask the organization
+administrator to assign one; do not create a temporary identity as a shortcut.
+
+Before adding a new exporter, scrape target, dashboard, custom CloudWatch
+metric, or log query, explain the operational question it answers and estimate
+its recurring ingestion, storage, query, and user-license cost. Keep the
+existing application and PostgreSQL baseline when the additional signal is
+duplicated elsewhere or is only useful for presentation.
 
 ## 17. A deployment is not one green job
 
