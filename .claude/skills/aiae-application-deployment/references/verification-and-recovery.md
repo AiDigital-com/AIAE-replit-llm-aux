@@ -120,7 +120,8 @@ Verify:
   names, without printing data;
 - Ingress/ALB targets are healthy and route the intended path;
 - probes succeed and are not blocked by authentication;
-- HPA/PDB match environment expectations.
+- HPA/PDB match environment expectations, and every HPA shows a real CPU
+  percentage with `ScalingActive=True`, not `cpu: <unknown>`.
 
 ## 7. User-visible smoke tests
 
@@ -184,6 +185,15 @@ fix a child manifest that was never rendered.
 Inspect resource events and source revisions. Determine whether Git is wrong,
 live resources are unhealthy, or reconciliation lacks IAM/Kubernetes access.
 Do not repeatedly force sync without understanding the failing resource.
+
+Three HPA messages already seen, each with its own fix (lessons-learned §18):
+
+- `failed to get cpu utilization ... (get pods.metrics.k8s.io)`: metrics-server
+  is not installed in that environment.
+- `missing request for cpu in container liquibase`: the migration Job's pod
+  carries the Deployment's selector labels.
+- `could not find version "v2" ... is installed on the destination cluster`:
+  stale Argo cluster cache; invalidate it, then sync once.
 
 ### Migration Job failed
 

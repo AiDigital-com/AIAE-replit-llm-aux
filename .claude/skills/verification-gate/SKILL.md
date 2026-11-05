@@ -6,7 +6,7 @@ description: Verify implementation claims with fresh, scope-appropriate evidence
 <!--
 Generated file. Do not edit directly.
 Source: AIAE-llm-aux/skills/verification-gate/SKILL.md
-Revision: 7b84eb81c4b9ac2afc9ae633dc96f8e4c18522ba
+Revision: 74d9683b493a7f35c41ff56c5ae9299a28fc4bbf
 Target: claude
 -->
 

@@ -154,7 +154,9 @@ Reuse these environment resources:
 - EKS cluster, node capacity, cluster OIDC provider, and namespace;
 - AWS-managed Argo CD capability and environment root Application;
 - GitHub OIDC provider and GitHub CodeConnections connection;
-- Secrets Store CSI driver and common cluster add-ons;
+- Secrets Store CSI driver and common cluster add-ons, including metrics-server
+  (`enable_metrics_server` in `AIAE-aws-infra`; enabled on DEV first, PROD
+  follows), which every HPA needs;
 - PROD monitoring/log-delivery platform unless the application has a justified
   separate compliance boundary.
 

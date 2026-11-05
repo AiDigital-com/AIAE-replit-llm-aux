@@ -379,3 +379,48 @@ Completion requires the chain to agree:
 12. login, database, logs, and metrics.
 
 Always report the first boundary where evidence stops.
+
+## 18. HPA, metrics-server, and Argo CD health
+
+### Symptom
+
+On 2026-11-04 every child Application with an HPA turned `Degraded` on DEV and
+PROD at the same time, with no deploy behind it. The pods, Ingress, and health
+endpoints were fine; the only red resource in the Argo tree was the HPA:
+
+```text
+the HPA was unable to compute the replica count: failed to get cpu
+utilization: ... (get pods.metrics.k8s.io)
+```
+
+### Causes already observed
+
+- EKS Auto Mode does not ship metrics-server, and the platform did not install
+  it. Every HPA had reported `ScalingActive=False` / `FailedGetResourceMetric`
+  since it was created, so PROD's 2-10 replica HPAs had never scaled.
+- Argo CD 3.5 started treating that condition as Degraded (argo-cd PR #26274).
+  The managed capability is upgraded by AWS without a change on our side, so
+  the colour changed while nothing in Git did.
+- Once metrics-server was installed, the next sync failed on the HPA with
+  `missing request for cpu in container liquibase`. The PreSync migration Job's
+  pod carried the chart's `selectorLabels`, so the HPA, the Service, and the PDB
+  all counted it as an application pod. A failed sync never deletes a
+  `HookSucceeded` Job, so the completed pod stayed and kept the HPA broken.
+- After the Argo upgrade, syncs of HPA-bearing Applications also failed with
+  `The Kubernetes API could not find version "v2" of autoscaling/HorizontalPodAutoscaler ...
+  Version "v2" ... is installed on the destination cluster` while the cluster
+  served `autoscaling/v2` normally: a stale cluster cache in Argo.
+
+### Prevention
+
+- Treat metrics-server as a shared add-on: `helm_release.metrics_server` in
+  `AIAE-aws-infra`, behind `enable_metrics_server`. Before relying on an HPA,
+  confirm `kubectl get apiservice v1beta1.metrics.k8s.io` is `Available=True`.
+- Give the migration Job's pod template its own labels (for example
+  `app.kubernetes.io/name: <chart>-liquibase`), never `selectorLabels`.
+- On the "could not find version ... is installed" error, use Settings ->
+  Clusters -> Invalidate Cache in Argo CD, then sync once. Do not change the
+  manifest's `apiVersion`.
+- A chart change that touches only a hook (the migration Job) does not make the
+  Application OutOfSync, so auto-sync will not apply it. After moving the chart
+  pin, sync the child explicitly and confirm the new hook ran.

@@ -336,7 +336,9 @@ application chart or extract a generic chart only when that refactor is fully
 render-tested and does not change Operational Hub resources.
 
 Check all name-specific helpers and selectors. A copied chart with old helper
-names can collide with the existing application.
+names can collide with the existing application. The migration Job's pod must
+not carry the Deployment's selector labels, or the HPA, Service, and PDB count
+it as an application pod (see lessons-learned §18).
 
 Include only required objects:
 
